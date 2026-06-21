@@ -1,0 +1,21 @@
+# Dependencies
+node_modules/
+
+# Work artifacts (screenshots taken during development)
+temporary screenshots/
+
+# Reference scaffolding (Truus template — has its own git repo, not part of the Fova site)
+Truus.co-Awwward-Website/
+
+# Heavy source images — the site serves the optimized versions in images/web/
+/images/*.jpg
+/images/*.jpeg
+/images/*.png
+!/images/wa-qr.png
+
+# Unused source audio (the site uses the jazz-piano track)
+áudio/LAKEY*.mp3
+
+# OS / misc
+.DS_Store
+*.log

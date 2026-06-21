@@ -1,0 +1,444 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>FOVA — Cases</title>
+    <meta name="description" content="Exemplos do tipo de projeto que a FOVA constrói: automação, IA e SaaS sob medida." />
+    <meta name="theme-color" content="#07070F" />
+    <link rel="icon" href="brand_assets/logos/fova-08-mono-black.svg" />
+
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.5/gsap.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.5/ScrollTrigger.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/lenis@1.1.14/dist/lenis.min.js"></script>
+
+    <style>
+        @font-face { font-family: 'Inter'; src: url('fonts/inter/Inter_28pt-Regular.ttf') format('truetype'); font-weight: 400; font-display: swap; }
+        @font-face { font-family: 'Inter'; src: url('fonts/inter/Inter_28pt-Medium.ttf') format('truetype'); font-weight: 500; font-display: swap; }
+        @font-face { font-family: 'Inter'; src: url('fonts/inter/Inter_28pt-SemiBold.ttf') format('truetype'); font-weight: 600; font-display: swap; }
+        @font-face { font-family: 'Inter'; src: url('fonts/inter/Inter_28pt-Bold.ttf') format('truetype'); font-weight: 700; font-display: swap; }
+        @font-face { font-family: 'Inter'; src: url('fonts/inter/Inter_28pt-ExtraBold.ttf') format('truetype'); font-weight: 800; font-display: swap; }
+        @font-face { font-family: 'Inter'; src: url('fonts/inter/Inter_28pt-Black.ttf') format('truetype'); font-weight: 900; font-display: swap; }
+        @font-face { font-family: 'Instrument Serif'; src: url('fonts/instrument-serif/InstrumentSerif-Regular.ttf') format('truetype'); font-weight: 400; font-style: normal; font-display: swap; }
+        @font-face { font-family: 'Instrument Serif'; src: url('fonts/instrument-serif/InstrumentSerif-Italic.ttf') format('truetype'); font-weight: 400; font-style: italic; font-display: swap; }
+        @font-face { font-family: 'HelveticaNeue'; src: url('fonts/helveticaneue/HelveticaNeue Bold.ttf') format('truetype'); font-weight: 700; font-display: swap; }
+
+        :root {
+            --bg-base: #07070F; --bg-surface: #0D0D1C; --bg-elevated: #151528; --bg-overlay: #1C1C38;
+            --brand-muted: #3D2E18; --brand-subtle: #6B5433; --brand: #CBA96E; --brand-strong: #DFC090; --brand-intense: #EDD5A8;
+            --text-primary: #F0EDE6; --text-secondary: #A89880; --text-muted: #706858;
+            --grad-start: #A88048; --grad-mid: #CBA96E; --grad-end: #EDD5A8;
+            --display: 'Inter', sans-serif; --serif: 'Instrument Serif', Georgia, serif; --body: 'Inter', sans-serif; --label: 'HelveticaNeue', 'Inter', sans-serif;
+        }
+
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        ::selection { background: var(--brand); color: var(--bg-base); }
+        img, svg { -webkit-user-select: none; user-select: none; }
+        html, body { scrollbar-width: none; -ms-overflow-style: none; }
+        html::-webkit-scrollbar, body::-webkit-scrollbar { display: none; }
+        body { background: var(--bg-base); font-family: var(--body); color: var(--text-primary); overflow-x: hidden; -webkit-font-smoothing: antialiased; }
+        a { color: inherit; }
+
+        /* Navbar */
+        .navbar {
+            position: fixed; top: 0; left: 0; width: 100%;
+            display: flex; justify-content: space-between; align-items: center;
+            padding: 20px 40px; z-index: 1000;
+            background: linear-gradient(to bottom, rgba(7, 7, 15, 0.92), rgba(7, 7, 15, 0));
+            backdrop-filter: blur(4px);
+        }
+        .nav-back, .nav-wa {
+            display: inline-flex; align-items: center; gap: 9px;
+            font-family: var(--display); font-weight: 800; font-size: 1.05rem;
+            text-decoration: none; color: var(--text-primary); cursor: pointer;
+            text-transform: lowercase; letter-spacing: -0.3px; transition: color 0.25s ease;
+        }
+        .nav-back:hover, .nav-wa:hover { color: var(--brand); }
+        .nav-back svg, .nav-wa svg { width: 20px; height: 20px; }
+        .logo-fova {
+            font-family: var(--display); font-weight: 900; font-size: 1.6rem;
+            letter-spacing: -0.04em; color: var(--text-primary); text-decoration: none; line-height: 1;
+        }
+
+        /* Hero */
+        .cases-hero { padding: 170px 40px 50px; text-align: center; position: relative; overflow: hidden; }
+        .cases-hero::before {
+            content: ""; position: absolute; width: 60vw; height: 60vw; max-width: 760px; max-height: 760px;
+            top: -20%; left: 50%; transform: translateX(-50%);
+            background: radial-gradient(circle, rgba(203, 169, 110, 0.14) 0%, transparent 62%); pointer-events: none;
+        }
+        .cases-eyebrow {
+            font-family: var(--label); font-size: 0.82rem; letter-spacing: 3px; text-transform: uppercase;
+            color: var(--text-muted); margin-bottom: 22px; position: relative;
+        }
+        .cases-title {
+            font-family: var(--display); font-weight: 800; font-size: clamp(2.8rem, 8vw, 6.5rem);
+            letter-spacing: -4px; line-height: 0.95; color: var(--text-primary); position: relative;
+        }
+        .cases-title em { font-family: var(--serif); font-style: italic; font-weight: 400; color: var(--brand); letter-spacing: -2px; }
+        .cases-sub {
+            max-width: 620px; margin: 28px auto 0; font-size: 1.18rem; line-height: 1.6;
+            color: var(--text-secondary); position: relative;
+        }
+
+        /* Topic section */
+        .case-section { max-width: 1180px; margin: 0 auto; padding: 60px 40px 30px; scroll-margin-top: 90px; }
+        .case-section__head { display: flex; align-items: center; gap: 18px; margin-bottom: 34px; }
+        .case-section__ico {
+            width: 58px; height: 58px; flex-shrink: 0; border-radius: 15px;
+            display: flex; align-items: center; justify-content: center; color: var(--brand);
+            background: linear-gradient(150deg, rgba(203, 169, 110, 0.16), rgba(203, 169, 110, 0.03));
+            border: 1px solid rgba(203, 169, 110, 0.22);
+        }
+        .case-section__ico svg { width: 32px; height: 32px; }
+        .case-section__title { font-family: var(--display); font-weight: 800; font-size: 2.2rem; letter-spacing: -1.5px; text-transform: lowercase; }
+        .case-section__title span { font-family: var(--serif); font-style: italic; font-weight: 400; color: var(--brand); text-transform: none; }
+
+        .case-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 22px; }
+
+        .case-card {
+            background: var(--bg-elevated); border: 1px solid rgba(203, 169, 110, 0.14);
+            border-radius: 20px; overflow: hidden; display: flex; flex-direction: column;
+            opacity: 0; transform: translateY(26px);
+            transition: opacity 0.6s ease, transform 0.6s cubic-bezier(0.22, 1, 0.36, 1), border-color 0.3s ease, box-shadow 0.3s ease;
+        }
+        .case-card.in { opacity: 1; transform: none; }
+        .case-card:hover { border-color: rgba(203, 169, 110, 0.4); box-shadow: 0 24px 60px -28px rgba(0, 0, 0, 0.9); }
+
+        .case-card__media { position: relative; height: 220px; overflow: hidden; background: var(--bg-overlay); }
+        .case-card__media img { width: 100%; height: 100%; object-fit: cover; transition: transform 0.6s cubic-bezier(0.22, 1, 0.36, 1); }
+        .case-card:hover .case-card__media img { transform: scale(1.05); }
+        .case-card__media--ico { display: flex; align-items: center; justify-content: center; background: linear-gradient(150deg, rgba(168, 128, 72, 0.18), rgba(13, 13, 28, 0.4)); }
+        .case-card__media--ico svg { width: 78px; height: 78px; color: var(--brand); }
+        .case-card__badge {
+            position: absolute; top: 14px; left: 14px; font-family: var(--label); font-weight: 700;
+            font-size: 0.78rem; text-transform: lowercase; padding: 4px 12px; border-radius: 20px;
+            border-bottom-left-radius: 1px; background: var(--brand); color: var(--bg-base);
+        }
+        .case-card__body { padding: 24px 24px 26px; display: flex; flex-direction: column; gap: 12px; flex: 1; }
+        .case-card__metric { font-family: var(--display); font-weight: 900; font-size: 1.7rem; letter-spacing: -1px; color: var(--brand); line-height: 1; }
+        .case-card__title { font-family: var(--display); font-weight: 700; font-size: 1.22rem; letter-spacing: -0.5px; line-height: 1.2; }
+        .case-card__desc { font-size: 0.98rem; line-height: 1.55; color: var(--text-secondary); }
+
+        /* Real project (link) cards */
+        .case-card--link { text-decoration: none; color: inherit; cursor: pointer; }
+        .case-card__media img.shot { object-position: top; }
+        .case-card__live {
+            display: inline-flex; align-items: center; gap: 8px;
+            font-family: var(--label); font-weight: 700; font-size: 0.8rem;
+            text-transform: lowercase; letter-spacing: 0.5px; color: var(--brand);
+        }
+        .live-dot {
+            width: 7px; height: 7px; border-radius: 50%; background: var(--success);
+            box-shadow: 0 0 0 0 rgba(28, 185, 122, 0.5); animation: livePulse 2s infinite;
+        }
+        @keyframes livePulse {
+            0% { box-shadow: 0 0 0 0 rgba(28, 185, 122, 0.45); }
+            70% { box-shadow: 0 0 0 8px rgba(28, 185, 122, 0); }
+            100% { box-shadow: 0 0 0 0 rgba(28, 185, 122, 0); }
+        }
+        .case-card__visit {
+            margin-top: 4px; font-family: var(--display); font-weight: 700; font-size: 0.95rem;
+            color: var(--brand); display: inline-flex; align-items: center; gap: 6px; transition: gap 0.2s ease;
+        }
+        .case-card--link:hover .case-card__visit { gap: 12px; }
+
+        .cases-note { text-align: center; max-width: 640px; margin: 30px auto 0; font-size: 0.95rem; color: var(--text-muted); line-height: 1.55; }
+
+        /* CTA + footer */
+        .cases-cta { text-align: center; padding: 90px 40px 70px; }
+        .cases-cta h2 { font-family: var(--display); font-weight: 800; font-size: clamp(2.2rem, 5vw, 3.6rem); letter-spacing: -2px; line-height: 1; margin-bottom: 26px; }
+        .cases-cta h2 em { font-family: var(--serif); font-style: italic; font-weight: 400; color: var(--brand); }
+        .cta-btn {
+            display: inline-flex; align-items: center; gap: 10px; text-decoration: none;
+            background: linear-gradient(100deg, var(--grad-start), var(--grad-mid)); color: var(--bg-base);
+            font-family: var(--display); font-weight: 800; font-size: 1.1rem; text-transform: lowercase;
+            padding: 16px 28px; border-radius: 14px; cursor: pointer;
+            transition: transform 0.2s ease, box-shadow 0.3s ease;
+        }
+        .cta-btn:hover { transform: translateY(-2px); box-shadow: 0 18px 40px -16px rgba(203, 169, 110, 0.5); }
+
+        .mini-footer {
+            border-top: 1px solid rgba(203, 169, 110, 0.14); padding: 40px; text-align: center;
+            display: flex; flex-direction: column; align-items: center; gap: 10px;
+        }
+        .mini-footer__wordmark { font-family: var(--display); font-weight: 900; font-size: 12vw; letter-spacing: -0.04em; color: var(--brand); line-height: 0.9; }
+        .mini-footer__tag { font-family: var(--serif); font-style: italic; font-size: 1.2rem; color: var(--text-secondary); }
+        .mini-footer__contact { font-size: 0.95rem; color: var(--text-muted); margin-top: 6px; }
+        .mini-footer__contact a { color: var(--brand); text-decoration: none; }
+
+        .cursor-bubble {
+            position: fixed; top: 0; left: 0; pointer-events: none; background: var(--brand); color: var(--bg-base);
+            padding: 5px 9px 4px 9px; border-radius: 50px 50px 50px 0; font-size: 15px; font-family: var(--label);
+            font-weight: 700; opacity: 0; transform: scale(0); transform-origin: left center; z-index: 10000;
+            white-space: nowrap; text-transform: lowercase;
+        }
+
+        @media (max-width: 760px) {
+            .navbar { padding: 14px 18px; }
+            .nav-back span, .nav-wa span { display: none; }
+            .logo-fova { font-size: 1.3rem; }
+            .case-section { padding: 50px 20px 20px; }
+            .case-grid { grid-template-columns: 1fr; }
+            .case-section__title { font-size: 1.7rem; }
+            .mini-footer__wordmark { font-size: 26vw; }
+        }
+
+        @media (prefers-reduced-motion: reduce) {
+            .case-card { opacity: 1; transform: none; }
+            .live-dot { animation: none !important; }
+            * { transition-duration: 0.01ms !important; }
+        }
+    </style>
+</head>
+
+<body>
+    <svg xmlns="http://www.w3.org/2000/svg" style="display:none" aria-hidden="true">
+        <symbol id="ico-automacao" viewBox="0 0 24 24">
+            <circle cx="12" cy="12" r="3.4" fill="none" stroke="currentColor" stroke-width="1.6" />
+            <path d="M12 2.4v2.6M12 19v2.6M21.6 12H19M5 12H2.4M18.8 5.2l-1.8 1.8M7 17l-1.8 1.8M18.8 18.8 17 17M7 7 5.2 5.2" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" />
+        </symbol>
+        <symbol id="ico-ia" viewBox="0 0 24 24">
+            <rect x="7" y="7" width="10" height="10" rx="2" fill="none" stroke="currentColor" stroke-width="1.6" />
+            <path d="M9.5 3.5v3M14.5 3.5v3M9.5 17.5v3M14.5 17.5v3M3.5 9.5h3M3.5 14.5h3M17.5 9.5h3M17.5 14.5h3" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" />
+            <path d="M12 9c.5 2.2 1 2.7 2.9 3.2-1.9.5-2.4 1-2.9 3.2-.5-2.2-1-2.7-2.9-3.2C11 11.7 11.5 11.2 12 9Z" fill="currentColor" />
+        </symbol>
+        <symbol id="ico-saas" viewBox="0 0 24 24">
+            <rect x="3" y="5" width="18" height="14" rx="2.5" fill="none" stroke="currentColor" stroke-width="1.6" />
+            <path d="M3 9.2h18" stroke="currentColor" stroke-width="1.6" />
+            <circle cx="6" cy="7.1" r=".75" fill="currentColor" />
+            <circle cx="8.4" cy="7.1" r=".75" fill="currentColor" />
+            <path d="M7 13h6M7 16h9" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" />
+        </symbol>
+        <symbol id="ico-live" viewBox="0 0 24 24">
+            <circle cx="12" cy="12" r="2.4" fill="currentColor" />
+            <path d="M8 8a5.6 5.6 0 0 0 0 8M16 16a5.6 5.6 0 0 0 0-8M5.2 5.2a9.6 9.6 0 0 0 0 13.6M18.8 18.8a9.6 9.6 0 0 0 0-13.6" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" />
+        </symbol>
+    </svg>
+
+    <div class="cursor-bubble">início</div>
+
+    <nav class="navbar">
+        <a href="index.html" class="nav-back">
+            <svg viewBox="0 0 24 24" fill="none"><path d="M15 5l-7 7 7 7" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" /></svg>
+            <span>início</span>
+        </a>
+        <a href="index.html" class="logo-fova">FOVA</a>
+        <a href="https://wa.me/5511956480444" target="_blank" rel="noopener" class="nav-wa">
+            <span>whatsapp</span>
+            <svg viewBox="0 0 24 24" fill="none"><path d="M3 21l1.6-5.1A8.5 8.5 0 1 1 8.1 19.4L3 21Z" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round" /></svg>
+        </a>
+    </nav>
+
+    <header class="cases-hero">
+        <p class="cases-eyebrow">cases · fova</p>
+        <h1 class="cases-title">o trabalho <em>fala</em>.</h1>
+        <p class="cases-sub">Exemplos do tipo de projeto que a gente entrega em automação, IA e SaaS. Os seus números a gente constrói junto.</p>
+    </header>
+
+    <!-- NO AR AGORA (projetos reais) -->
+    <section class="case-section" id="projetos">
+        <div class="case-section__head">
+            <span class="case-section__ico"><svg viewBox="0 0 24 24"><use href="#ico-live" /></svg></span>
+            <h2 class="case-section__title">no ar <span>agora</span></h2>
+        </div>
+        <div class="case-grid">
+            <a class="case-card case-card--link" href="https://klinic-ia.vercel.app" target="_blank" rel="noopener">
+                <div class="case-card__media">
+                    <span class="case-card__badge">saas · ia</span>
+                    <img class="shot" src="images/web/case-klinic.jpg" width="1280" height="800" loading="lazy" decoding="async" alt="Site do Konverce" />
+                </div>
+                <div class="case-card__body">
+                    <div class="case-card__live"><span class="live-dot"></span>konverce</div>
+                    <h3 class="case-card__title">indicações no automático, pelo whatsapp</h3>
+                    <p class="case-card__desc">Um programa de indicações com IA pra clínicas, barbearias e estética. A base manda os contatos, a IA conversa com cada um até o agendamento e a comissão só entra quando o cliente novo aparece.</p>
+                    <span class="case-card__visit">visitar o site →</span>
+                </div>
+            </a>
+            <a class="case-card case-card--link" href="https://portfolio-drab-one-59.vercel.app" target="_blank" rel="noopener">
+                <div class="case-card__media">
+                    <span class="case-card__badge">site</span>
+                    <img class="shot" src="images/web/case-portfolio.jpg" width="1280" height="800" loading="lazy" decoding="async" alt="Portfólio do João Caramaschi" />
+                </div>
+                <div class="case-card__body">
+                    <div class="case-card__live"><span class="live-dot"></span>portfólio</div>
+                    <h3 class="case-card__title">o portfólio do joão caramaschi</h3>
+                    <p class="case-card__desc">Um site leve e com cara própria pra mostrar o trabalho de quem vive de social media. Rápido no celular e direto ao ponto.</p>
+                    <span class="case-card__visit">visitar o site →</span>
+                </div>
+            </a>
+        </div>
+    </section>
+
+    <!-- AUTOMAÇÃO -->
+    <section class="case-section" id="automacao">
+        <div class="case-section__head">
+            <span class="case-section__ico"><svg viewBox="0 0 24 24"><use href="#ico-automacao" /></svg></span>
+            <h2 class="case-section__title">automação</h2>
+        </div>
+        <div class="case-grid">
+            <article class="case-card">
+                <div class="case-card__media">
+                    <span class="case-card__badge">automação</span>
+                    <img src="images/web/sad-man-thinking-something-while-waiting-group-therapy-start.jpg" width="1200" height="800" loading="lazy" decoding="async" alt="" />
+                </div>
+                <div class="case-card__body">
+                    <div class="case-card__metric">−72% de espera</div>
+                    <h3 class="case-card__title">atendimento que responde sozinho</h3>
+                    <p class="case-card__desc">Um fluxo de WhatsApp e e-mail que entende o pedido, responde na hora e só chama uma pessoa quando o caso pede. O time para de apagar incêndio e volta a vender.</p>
+                </div>
+            </article>
+            <article class="case-card">
+                <div class="case-card__media">
+                    <span class="case-card__badge">automação</span>
+                    <img src="images/web/business-people-shaking-hands-agreement.jpg" width="1200" height="800" loading="lazy" decoding="async" alt="" />
+                </div>
+                <div class="case-card__body">
+                    <div class="case-card__metric">fechamento 5x mais rápido</div>
+                    <h3 class="case-card__title">financeiro no piloto automático</h3>
+                    <p class="case-card__desc">Conciliação, cobrança e relatório mensal rodando sem ninguém abrir planilha. No fim do mês, o número já está pronto pra decisão.</p>
+                </div>
+            </article>
+        </div>
+    </section>
+
+    <!-- IA -->
+    <section class="case-section" id="ia">
+        <div class="case-section__head">
+            <span class="case-section__ico"><svg viewBox="0 0 24 24"><use href="#ico-ia" /></svg></span>
+            <h2 class="case-section__title">inteligência <span>artificial</span></h2>
+        </div>
+        <div class="case-grid">
+            <article class="case-card">
+                <div class="case-card__media">
+                    <span class="case-card__badge">ia</span>
+                    <img src="images/web/group-diverse-people-having-business-meeting.jpg" width="1200" height="657" loading="lazy" decoding="async" alt="" />
+                </div>
+                <div class="case-card__body">
+                    <div class="case-card__metric">3x mais reuniões</div>
+                    <h3 class="case-card__title">agente que qualifica cada lead</h3>
+                    <p class="case-card__desc">A IA lê, pontua e responde cada lead em segundos. O vendedor recebe só quem já está pronto pra conversar, e usa o tempo dele onde fecha.</p>
+                </div>
+            </article>
+            <article class="case-card">
+                <div class="case-card__media">
+                    <span class="case-card__badge">ia</span>
+                    <img src="images/web/36748616061539.jpg" width="1200" height="1100" loading="lazy" decoding="async" alt="" />
+                </div>
+                <div class="case-card__body">
+                    <div class="case-card__metric">de 2 dias para 2 minutos</div>
+                    <h3 class="case-card__title">leitura de documentos em segundos</h3>
+                    <p class="case-card__desc">Contratos, notas e formulários lidos pela IA, com os dados já organizados no seu sistema. Ninguém mais digita à mão.</p>
+                </div>
+            </article>
+        </div>
+    </section>
+
+    <!-- SAAS -->
+    <section class="case-section" id="saas">
+        <div class="case-section__head">
+            <span class="case-section__ico"><svg viewBox="0 0 24 24"><use href="#ico-saas" /></svg></span>
+            <h2 class="case-section__title">saas <span>sob medida</span></h2>
+        </div>
+        <div class="case-grid">
+            <article class="case-card">
+                <div class="case-card__media">
+                    <span class="case-card__badge">saas</span>
+                    <img src="images/web/business-data-analytics-dashboard.jpg" width="1200" height="684" loading="lazy" decoding="async" alt="" />
+                </div>
+                <div class="case-card__body">
+                    <div class="case-card__metric">decisão no mesmo dia</div>
+                    <h3 class="case-card__title">painel que mostra tudo num lugar só</h3>
+                    <p class="case-card__desc">Um dashboard sob medida juntando vendas, operação e financeiro em tempo real. Acabou o "deixa eu puxar a planilha".</p>
+                </div>
+            </article>
+            <article class="case-card">
+                <div class="case-card__media">
+                    <span class="case-card__badge">saas</span>
+                    <img src="images/web/close-up-image-programer-working-his-desk-office.jpg" width="1200" height="801" loading="lazy" decoding="async" alt="" />
+                </div>
+                <div class="case-card__body">
+                    <div class="case-card__metric">do zero ao 1º cliente</div>
+                    <h3 class="case-card__title">mvp no ar em semanas</h3>
+                    <p class="case-card__desc">Um produto enxuto pra validar a ideia com gente de verdade antes de investir pesado. Rápido pra aprender, fácil de evoluir.</p>
+                </div>
+            </article>
+        </div>
+        <p class="cases-note">Esses são exemplos do que a gente constrói. O seu case começa numa conversa de 15 minutos, e a gente já sai de lá com um plano.</p>
+    </section>
+
+    <section class="cases-cta">
+        <h2>bora fazer o <em>seu</em>?</h2>
+        <a href="https://wa.me/5511956480444" target="_blank" rel="noopener" class="cta-btn">
+            chamar no whatsapp
+            <svg viewBox="0 0 24 24" fill="none" width="18" height="18"><path d="M5 12h14M13 6l6 6-6 6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" /></svg>
+        </a>
+    </section>
+
+    <footer class="mini-footer">
+        <div class="mini-footer__wordmark">FOVA</div>
+        <div class="mini-footer__tag">além do esforço.</div>
+        <div class="mini-footer__contact"><a href="mailto:fovaagencia@gmail.com">fovaagencia@gmail.com</a> · <a href="https://wa.me/5511956480444" target="_blank" rel="noopener">(11) 95648-0444</a> · <a href="https://www.instagram.com/agencia.fova/" target="_blank" rel="noopener">@agencia.fova</a></div>
+    </footer>
+
+    <script>
+        (function () {
+            'use strict';
+            var hasGSAP = typeof gsap !== 'undefined';
+            var hasST = hasGSAP && typeof ScrollTrigger !== 'undefined';
+            if (hasST) gsap.registerPlugin(ScrollTrigger);
+            var reduce = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+            document.addEventListener('DOMContentLoaded', function () {
+                if (typeof Lenis !== 'undefined' && hasGSAP && !reduce) {
+                    var lenis = new Lenis({ duration: 1.1, smoothWheel: true });
+                    if (hasST) lenis.on('scroll', ScrollTrigger.update);
+                    gsap.ticker.add(function (t) { lenis.raf(t * 1000); });
+                    gsap.ticker.lagSmoothing(0);
+                    window.__lenis = lenis;
+                    // make in-page anchor links respect smooth scroll
+                    document.querySelectorAll('a[href^="#"]').forEach(function (a) {
+                        a.addEventListener('click', function (e) { var t = document.querySelector(a.getAttribute('href')); if (t) { e.preventDefault(); lenis.scrollTo(t, { offset: -80 }); } });
+                    });
+                }
+
+                // Reveal case cards on scroll
+                var cards = document.querySelectorAll('.case-card');
+                if ('IntersectionObserver' in window && !reduce) {
+                    var io = new IntersectionObserver(function (ents) {
+                        ents.forEach(function (en) { if (en.isIntersecting) { en.target.classList.add('in'); io.unobserve(en.target); } });
+                    }, { rootMargin: '0px 0px -10% 0px' });
+                    cards.forEach(function (c) { io.observe(c); });
+                } else {
+                    cards.forEach(function (c) { c.classList.add('in'); });
+                }
+
+                // Cursor bubble
+                var bubble = document.querySelector('.cursor-bubble');
+                if (bubble && hasGSAP) {
+                    var xTo = gsap.quickTo(bubble, 'x', { duration: 0.5, ease: 'power3' });
+                    var yTo = gsap.quickTo(bubble, 'y', { duration: 0.5, ease: 'power3' });
+                    var hovering = false;
+                    gsap.set(bubble, { rotation: -30 });
+                    window.addEventListener('mousemove', function (e) { xTo(e.clientX + 13); yTo(e.clientY - 43); });
+                    document.addEventListener('mouseover', function (e) {
+                        var found = e.target.closest('a, .cta-btn');
+                        if (found && !hovering) {
+                            hovering = true;
+                            bubble.textContent = found.classList.contains('logo-fova') ? 'início' : (found.classList.contains('cta-btn') || found.classList.contains('nav-wa') ? 'chamar' : 'abrir');
+                            gsap.killTweensOf(bubble, 'opacity,scale,rotation');
+                            gsap.to(bubble, { opacity: 1, scale: 1, rotation: 0, duration: 1.4, delay: 0.05, ease: 'elastic.out(1, 0.45)' });
+                        } else if (!found && hovering) {
+                            hovering = false;
+                            gsap.killTweensOf(bubble, 'opacity,scale,rotation');
+                            gsap.to(bubble, { opacity: 1, scale: 0, rotation: -30, duration: 0.3, ease: 'sine.inOut' });
+                        }
+                    });
+                }
+            });
+        })();
+    </script>
+</body>
+
+</html>
