@@ -19,3 +19,4 @@ Truus.co-Awwward-Website/
 # OS / misc
 .DS_Store
 *.log
+.vercel
