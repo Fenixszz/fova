@@ -1,0 +1,13 @@
+node_modules
+temporary screenshots
+Truus.co-Awwward-Website
+.git
+# Heavy source images — the site serves the optimized versions in images/web/
+/images/*.jpg
+/images/*.jpeg
+/images/*.png
+!/images/wa-qr.png
+# Unused source audio (the site uses the jazz-piano track)
+áudio/LAKEY*.mp3
+.DS_Store
+*.log
