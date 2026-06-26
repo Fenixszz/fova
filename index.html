@@ -1782,8 +1782,8 @@
         }
 
         .footer-wordmark-img {
-            width: 106vw;
-            max-width: 1680px;
+            width: 28vw;
+            max-width: 448px;
             height: auto;
             display: block;
         }
@@ -2071,10 +2071,18 @@
             .footer-column h3, .footer-column address { font-size: 1.5rem; }
             .footer-email { font-size: 1.4rem; }
             .footer-whatsapp { font-size: 1.4rem; }
-            .footer-big-text { height: 36vw; }
-            .footer-wordmark-img { width: 142vw; }
+            .footer-big-text { height: auto; padding: 2vw 0 9vw; overflow: visible; }
+            .footer-wordmark-img { width: 88vw; max-width: none; }
             .footer-bottom { margin-top: 92px; }
             .footer-tagline { font-size: 1.05rem; }
+            /* stickers framing the big wordmark (corners) instead of covering it */
+            .footer-sticker { width: 38px; }
+            .footer-sticker.sticker-boom { left: 3%; bottom: 1%; top: auto; width: 42px; }
+            .footer-sticker.sticker-camera { right: 4%; bottom: 5%; top: auto; left: auto; width: 38px; }
+            .footer-sticker.sticker-smiley { left: 4%; top: 1%; bottom: auto; width: 34px; }
+            .footer-sticker.sticker-100 { right: 5%; top: 2%; bottom: auto; left: auto; width: 32px; }
+            .footer-sticker.sticker-heart { display: none; }
+            .footer-sticker.sticker-hands { display: none; }
         }
 
         @media (prefers-reduced-motion: reduce) {
@@ -2519,7 +2527,7 @@
             </div>
 
             <div class="footer-bottom">
-                <div class="footer-big-text"><img class="footer-wordmark-img" src="brand_assets/logos/fova-display-gold-nobg.svg" alt="FOVA" /></div>
+                <div class="footer-big-text"><img class="footer-wordmark-img" src="brand_assets/logos/fova-display-gold-crop.svg" alt="FOVA" /></div>
 
                 <div class="footer-stickers">
                     <div class="footer-sticker sticker-smiley"><svg viewBox="0 0 100 100"><use href="#fova-spark" /></svg></div>
