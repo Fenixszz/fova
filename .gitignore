@@ -3,6 +3,7 @@ node_modules/
 
 # Work artifacts (screenshots taken during development)
 temporary screenshots/
+scratchpad-*.mjs
 
 # Reference scaffolding (Truus template — has its own git repo, not part of the Fova site)
 Truus.co-Awwward-Website/
