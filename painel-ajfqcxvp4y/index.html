@@ -6,10 +6,24 @@
   <meta name="robots" content="noindex, nofollow" />
   <title>FOVA · CRM · Área ADM</title>
   <link rel="icon" href="/public/fova-white-crop.svg" type="image/svg+xml" />
+  <script>
+    /* Reporta erros na própria tela de senha — assim falhas não ficam silenciosas. */
+    window.__admReady = false;
+    window.__admShowErr = function (m) {
+      var put = function () { var e = document.getElementById('lockErr'); if (e) e.textContent = m; };
+      if (document.getElementById('lockErr')) put(); else document.addEventListener('DOMContentLoaded', put);
+    };
+    window.addEventListener('error', function (e) {
+      window.__admShowErr('Erro técnico: ' + ((e && e.message) || 'falha ao carregar script') + ' — me mande este texto.');
+    });
+    window.addEventListener('unhandledrejection', function (e) {
+      window.__admShowErr('Erro técnico: ' + ((e && e.reason && e.reason.message) || (e && e.reason) || 'falha') + ' — me mande este texto.');
+    });
+  </script>
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Instrument+Serif:ital@0;1&display=swap" rel="stylesheet" />
-  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
   <style>
     :root {
       --bg-base: #07070F;
@@ -488,7 +502,20 @@
     </main>
   </div>
 
-  <script src="crm-data.enc.js"></script>
-  <script src="app.js"></script>
+  <script>
+    /* Impede o recarregamento silencioso da página caso o app não carregue,
+       e avisa se o painel não terminou de iniciar. */
+    (function () {
+      var f = document.getElementById('lockForm');
+      if (f) f.addEventListener('submit', function (e) { e.preventDefault(); }, true);
+    })();
+    window.addEventListener('load', function () {
+      setTimeout(function () {
+        if (!window.__admReady) window.__admShowErr('O painel não terminou de carregar aqui. Recarregue a página (puxe a tela pra baixo). Se continuar, me avise.');
+      }, 2000);
+    });
+  </script>
+  <script src="crm-data.enc.js?v=4"></script>
+  <script src="app.js?v=4"></script>
 </body>
 </html>

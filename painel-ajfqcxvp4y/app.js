@@ -149,7 +149,7 @@
     btn.disabled = true; err.textContent = '';
     const ok = await tryUnlock(input.value.trim());
     if (ok) {
-      sessionStorage.setItem('fova_adm_ok', '1');
+      try { sessionStorage.setItem('fova_adm_ok', '1'); } catch (e) {}
       lock.hidden = true; app.hidden = false;
       boot();
     } else {
@@ -159,12 +159,17 @@
   });
 
   // auto-unlock within the session (plaintext mode only; encrypted always asks)
-  if (sessionStorage.getItem('fova_adm_ok') === '1' && !window.CRM_ENC && window.CRM) {
+  let _sessOk = false;
+  try { _sessOk = sessionStorage.getItem('fova_adm_ok') === '1'; } catch (e) { _sessOk = false; }
+  if (_sessOk && !window.CRM_ENC && window.CRM) {
     DATA = window.CRM; lock.hidden = true; app.hidden = false; document.addEventListener('DOMContentLoaded', boot);
     if (document.readyState !== 'loading') boot();
   } else {
-    setTimeout(() => $('#lockInput').focus(), 100);
+    setTimeout(() => { try { $('#lockInput').focus(); } catch (e) {} }, 100);
   }
+
+  // signal that the script parsed and wired up successfully
+  window.__admReady = true;
 
   /* ============================================================
      NAV / ROUTING
