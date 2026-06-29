@@ -244,6 +244,16 @@
     .chip svg { width: 15px; height: 15px; }
     .btn-ghost { height: 42px; padding: 0 14px; border-radius: 11px; border: 1px solid var(--line); background: none; color: var(--text-2); font-size: 13.5px; cursor: pointer; font-family: var(--font); transition: all .14s; }
     .btn-ghost:hover { color: var(--text); border-color: #3a3a5e; }
+    .tb-sep { width: 1px; height: 26px; background: var(--line); margin: 0 3px; align-self: center; }
+    .btn-import { height: 42px; padding: 0 16px; border-radius: 11px; border: 1px solid rgba(203,169,110,.45); background: rgba(203,169,110,.10); color: var(--brand-bright); font-size: 13.5px; font-weight: 600; cursor: pointer; font-family: var(--font); display: inline-flex; align-items: center; gap: 8px; transition: all .14s; white-space: nowrap; }
+    .btn-import:hover { background: rgba(203,169,110,.18); border-color: var(--brand); }
+    .btn-import svg { width: 16px; height: 16px; }
+    /* toast */
+    .toast { position: fixed; left: 50%; bottom: 26px; transform: translateX(-50%) translateY(20px); z-index: 150; display: flex; align-items: center; gap: 10px; padding: 13px 18px; border-radius: 12px; background: var(--bg-3); border: 1px solid var(--line); color: var(--text); font-size: 14px; font-weight: 500; box-shadow: var(--shadow); opacity: 0; pointer-events: none; transition: opacity .25s, transform .25s; max-width: 92vw; }
+    .toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+    .toast svg { width: 18px; height: 18px; flex: none; }
+    .toast--ok { border-color: rgba(111,191,139,.45); } .toast--ok svg { color: var(--ok); }
+    .toast--bad { border-color: rgba(216,138,110,.45); } .toast--bad svg { color: var(--bad); }
     .result-count { color: var(--text-2); font-size: 13px; margin: 0 0 12px; }
     .result-count b { color: var(--text); }
 
@@ -263,6 +273,11 @@
     .tbl tbody tr:hover { background: rgba(203,169,110,.05); }
     .tbl tbody tr.is-open { background: rgba(203,169,110,.07); }
     .tbl tbody tr:last-child td { border-bottom: none; }
+    .emp-wrap { display: flex; align-items: flex-start; gap: 8px; }
+    .emp-chev { color: var(--text-3); margin-top: 1px; transition: transform .18s, color .14s; flex: none; }
+    .emp-chev svg { width: 15px; height: 15px; display: block; }
+    .row-toggle:hover .emp-chev { color: var(--brand); }
+    .emp-chev.open { transform: rotate(90deg); color: var(--brand); }
     .cell-emp { font-weight: 600; color: var(--text); }
     .cell-emp .seg { display: block; font-size: 11.5px; color: var(--text-3); font-weight: 400; margin-top: 1px; }
     .cell-decisor { color: var(--text); } .cell-decisor.muted { color: var(--text-3); font-style: italic; }
@@ -283,6 +298,37 @@
     .act-btn svg { width: 15px; height: 15px; }
     .status-select { height: 38px; padding: 0 30px 0 12px; border-radius: 10px; border: 1px solid var(--line); background: var(--bg-2); color: var(--text); font-family: var(--font); font-size: 13px; cursor: pointer; appearance: none;
       background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%23A89880' stroke-width='2.5'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E"); background-repeat: no-repeat; background-position: right 10px center; }
+
+    /* ===== lead detail (empresa aberta) ===== */
+    .lead-detail { padding: 20px 22px; display: grid; grid-template-columns: 1.55fr 1fr; gap: 26px; }
+    .ld-main { min-width: 0; display: flex; flex-direction: column; gap: 16px; }
+    .ld-k { font-size: 10.5px; letter-spacing: .15em; text-transform: uppercase; color: var(--brand); font-weight: 700; margin-bottom: 6px; }
+    .ld-name { font-family: var(--serif); font-size: 1.75rem; line-height: 1.1; color: var(--text); }
+    .ld-name.muted { color: var(--text-2); font-style: italic; font-size: 1.3rem; }
+    .ld-role { font-size: 13px; color: var(--text-2); margin-top: 3px; }
+    .ld-cta { display: flex; flex-direction: column; gap: 9px; align-items: flex-start; }
+    .ld-primary {
+      display: inline-flex; align-items: center; gap: 9px; padding: 12px 18px; border-radius: 12px; font-weight: 700; font-size: 15px;
+      background: linear-gradient(180deg, var(--brand-bright), var(--brand)); color: #2a2113; transition: transform .12s, filter .15s; box-shadow: 0 8px 20px -10px rgba(203,169,110,.6);
+    }
+    .ld-primary:hover { filter: brightness(1.05); } .ld-primary:active { transform: scale(.98); }
+    .ld-primary svg { width: 17px; height: 17px; } .ld-primary svg:last-child { width: 15px; height: 15px; opacity: .8; }
+    .ld-nochan { font-size: 13px; color: var(--text-2); }
+    .ld-guide { display: inline-flex; align-items: center; gap: 7px; font-size: 12.5px; }
+    .ld-guide .dot { width: 8px; height: 8px; border-radius: 50%; flex: none; }
+    .ld-guide.conf-Alta { color: #9fe0b6; } .ld-guide.conf-Alta .dot { background: var(--ok); }
+    .ld-guide.conf-Média { color: #ecca8e; } .ld-guide.conf-Média .dot { background: var(--warn); }
+    .ld-guide.conf-Baixa { color: #eaa890; } .ld-guide.conf-Baixa .dot { background: var(--bad); }
+    .ld-say p { font-size: 14px; line-height: 1.6; color: var(--text); }
+    .ld-side { min-width: 0; display: flex; flex-direction: column; gap: 14px; border-left: 1px solid var(--line-soft); padding-left: 24px; }
+    .ld-btns { display: flex; flex-wrap: wrap; gap: 8px; }
+    .ld-side .detail__facts { gap: 8px; }
+    .ld-why p { font-size: 12.5px; line-height: 1.55; color: var(--text-2); }
+    .ld-dim { font-size: 12.5px; color: var(--text-3); }
+    .ld-foot { grid-column: 1 / -1; display: flex; align-items: center; justify-content: space-between; gap: 14px; flex-wrap: wrap; border-top: 1px solid var(--line-soft); padding-top: 14px; }
+    .ld-link { display: inline-flex; align-items: center; gap: 8px; font-size: 13px; font-weight: 600; color: var(--brand-mid); cursor: pointer; }
+    .ld-link:hover { color: var(--brand-bright); } .ld-link svg { width: 16px; height: 16px; }
+    .ld-status { display: inline-flex; align-items: center; gap: 9px; font-size: 13px; color: var(--text-2); }
 
     /* badges */
     .badge { display: inline-flex; align-items: center; gap: 6px; padding: 4px 9px; border-radius: 999px; font-size: 11.5px; font-weight: 600; white-space: nowrap; }
@@ -383,6 +429,11 @@
       .grid-2, .grid-3 { grid-template-columns: 1fr; }
       .span-2 { grid-column: span 1; }
       .detail__inner { grid-template-columns: 1fr; }
+      .lead-detail { grid-template-columns: 1fr; gap: 18px; padding: 16px; position: sticky; left: 0; width: calc(100vw - 32px); box-sizing: border-box; }
+      .ld-name { font-size: 1.5rem; } .ld-primary { font-size: 14px; }
+      .ld-side { border-left: none; padding-left: 0; border-top: 1px solid var(--line-soft); padding-top: 16px; }
+      .ld-primary { width: 100%; justify-content: center; }
+      .ld-foot { flex-direction: column; align-items: stretch; gap: 12px; }
       .guide { grid-template-columns: 1fr; }
       /* table → horizontal scroll */
       .table-scroll { overflow-x: auto; -webkit-overflow-scrolling: touch; }
@@ -455,7 +506,7 @@
         <div class="page-head">
           <div class="page-eyebrow">Leads</div>
           <h1 class="page-title">Onde você <em>trabalha</em></h1>
-          <p class="page-sub">Filtre por “ação hoje” (verde = mandar), abra a linha para ver o gancho e os contatos, e marque o que já enviou.</p>
+          <p class="page-sub">Verde = mandar hoje. <b style="color:var(--text)">Clique numa empresa</b> pra ver quem decide, o melhor canal e o que dizer — tudo numa tela. Tem novos contatos? Use <b style="color:var(--text)">Importar planilha</b>.</p>
         </div>
         <div class="toolbar" id="leadsToolbar"></div>
         <p class="result-count" id="leadsCount"></p>
@@ -521,7 +572,7 @@
       }, 2500);
     });
   </script>
-  <script src="crm-data.enc.js?v=5"></script>
-  <script src="app.js?v=5"></script>
+  <script src="crm-data.enc.js?v=6"></script>
+  <script src="app.js?v=6"></script>
 </body>
 </html>

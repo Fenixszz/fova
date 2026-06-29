@@ -31,6 +31,9 @@
     info: '<circle cx="12" cy="12" r="8.5"/><path d="M12 11v5M12 8v.01"/>',
     inbox: '<path d="M3 13h5l1.5 3h5L16 13h5"/><path d="M5 5h14l2 8v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4z"/>',
     refresh: '<path d="M4 12a8 8 0 0 1 13.7-5.6L20 8M20 4v4h-4M20 12a8 8 0 0 1-13.7 5.6L4 16M4 20v-4h4"/>',
+    upload: '<path d="M12 15V4M8 8l4-4 4 4M5 16v2a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-2"/>',
+    sparkle: '<path d="M12 3l1.8 5.2L19 10l-5.2 1.8L12 17l-1.8-5.2L5 10l5.2-1.8z"/>',
+    chevR: '<path d="M9 6l6 6-6 6"/>',
   };
   function icon(name, w) { return '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"' + (w ? ' width="' + w + '" height="' + w + '"' : '') + '>' + (P[name] || '') + '</svg>'; }
 
@@ -105,20 +108,47 @@
   /* ============================================================
      UNLOCK / GATE
      ============================================================ */
-  let DATA = null;
+  let BASELINE = null;   // dados originais (decifrados) — nunca mutados
+  let DATA = null;       // dados de trabalho = BASELINE + importações do usuário
+  let _decIndex = null;  // índice decisor por empresa (cache)
   const lock = $('#lock'), app = $('#app');
 
   async function tryUnlock(pw) {
     // Encrypted mode
     if (window.CRM_ENC) {
-      try { DATA = await decryptData(window.CRM_ENC, pw); return true; } catch (e) { return false; }
+      try { BASELINE = await decryptData(window.CRM_ENC, pw); rebuildData(); return true; } catch (e) { return false; }
     }
     // Plaintext mode (data already loaded) — gate by passphrase
     if (window.CRM) {
-      if (pw === (window.CRM_PASS || 'fova2026')) { DATA = window.CRM; return true; }
+      if (pw === (window.CRM_PASS || 'fova2026')) { BASELINE = window.CRM; rebuildData(); return true; }
       return false;
     }
     return false;
+  }
+
+  /* ---------- importações do usuário (CSV) persistidas no aparelho ---------- */
+  const LS_IMPORT = 'fova_crm_import_v1';
+  function loadImports() { try { return JSON.parse(localStorage.getItem(LS_IMPORT) || 'null'); } catch (e) { return null; } }
+  function saveImports(o) { try { localStorage.setItem(LS_IMPORT, JSON.stringify(o)); } catch (e) {} }
+  function normKey(s) { return (s || '').toString().toLowerCase().trim(); }
+  function upsertBy(base, extra, key) {
+    const m = new Map(base.map((x) => [normKey(x[key]), x]));
+    extra.forEach((x) => { const k = normKey(x[key]); m.set(k, Object.assign({}, m.get(k) || {}, x)); });
+    return Array.from(m.values());
+  }
+  function rebuildData() {
+    if (!BASELINE) { DATA = null; return; }
+    const imp = loadImports() || {};
+    DATA = {
+      leads: (imp.leads && imp.leads.length) ? upsertBy(BASELINE.leads, imp.leads, 'empresa') : BASELINE.leads.slice(),
+      decisores: (imp.decisores && imp.decisores.length) ? upsertBy(BASELINE.decisores, imp.decisores, 'empresa') : BASELINE.decisores.slice(),
+      config: BASELINE.config, comoUsar: BASELINE.comoUsar, painel: BASELINE.painel,
+    };
+    _decIndex = null;
+  }
+  function decisorFor(empresa) {
+    if (!_decIndex) { _decIndex = {}; (DATA.decisores || []).forEach((d) => { _decIndex[normKey(d.empresa)] = d; }); }
+    return _decIndex[normKey(empresa)] || null;
   }
 
   async function decryptData(enc, pw) {
@@ -162,7 +192,7 @@
   let _sessOk = false;
   try { _sessOk = sessionStorage.getItem('fova_adm_ok') === '1'; } catch (e) { _sessOk = false; }
   if (_sessOk && !window.CRM_ENC && window.CRM) {
-    DATA = window.CRM; lock.hidden = true; app.hidden = false; document.addEventListener('DOMContentLoaded', boot);
+    BASELINE = window.CRM; rebuildData(); lock.hidden = true; app.hidden = false; document.addEventListener('DOMContentLoaded', boot);
     if (document.readyState !== 'loading') boot();
   } else {
     setTimeout(() => { try { $('#lockInput').focus(); } catch (e) {} }, 100);
@@ -380,13 +410,17 @@
     const segs = [...new Set(DATA.leads.map((l) => segCat(l.segmento)))].sort();
     const tb = $('#leadsToolbar');
     tb.innerHTML =
-      '<div class="search">' + icon('search') + '<input id="leadSearch" type="search" placeholder="Buscar empresa, dono, @, segmento…" aria-label="Buscar leads" /></div>' +
+      '<div class="search">' + icon('search') + '<input id="leadSearch" type="search" placeholder="Buscar empresa ou dono…" aria-label="Buscar leads" /></div>' +
       sel('fTier', 'Tier', [['', 'Todos os tiers'], ['A', 'Tier A'], ['B', 'Tier B'], ['C', 'Tier C']]) +
       sel('fConf', 'Confiança', [['', 'Toda confiança'], ['Alta', 'Alta'], ['Média', 'Média'], ['Baixa', 'Baixa']]) +
       sel('fCanal', 'Canal', [['', 'Todos os canais'], ['Instagram DM', 'Instagram'], ['WhatsApp', 'WhatsApp'], ['LinkedIn', 'LinkedIn']]) +
       sel('fSeg', 'Segmento', [['', 'Todos os segmentos']].concat(segs.map((s) => [s, s]))) +
       '<button class="chip" id="chipAcao" type="button" aria-pressed="false">' + icon('bolt') + 'Só ação de hoje</button>' +
-      '<button class="btn-ghost" id="btnReset" type="button">Limpar</button>';
+      '<button class="btn-ghost" id="btnReset" type="button">Limpar filtros</button>' +
+      '<span class="tb-sep"></span>' +
+      '<button class="btn-import" id="btnImport" type="button" title="Suba uma planilha (CSV) com novos contatos">' + icon('upload') + 'Importar planilha</button>' +
+      (loadImports() ? '<button class="btn-ghost" id="btnRestore" type="button" title="Voltar aos dados originais">Restaurar original</button>' : '') +
+      '<input type="file" id="csvInput" accept=".csv,text/csv,text/plain" hidden />';
 
     $('#leadSearch').addEventListener('input', (e) => { leadFilters.q = e.target.value.toLowerCase(); paintLeads(); });
     $('#fTier').addEventListener('change', (e) => { leadFilters.tier = e.target.value; paintLeads(); });
@@ -395,6 +429,9 @@
     $('#fSeg').addEventListener('change', (e) => { leadFilters.seg = e.target.value; paintLeads(); });
     $('#chipAcao').addEventListener('click', () => { leadFilters.acao = !leadFilters.acao; syncToolbar(); paintLeads(); });
     $('#btnReset').addEventListener('click', () => { Object.assign(leadFilters, { q: '', tier: '', conf: '', seg: '', reg: '', canal: '', acao: false }); syncToolbar(); paintLeads(); });
+    $('#btnImport').addEventListener('click', () => $('#csvInput').click());
+    $('#csvInput').addEventListener('change', handleCSVFile);
+    var br = $('#btnRestore'); if (br) br.addEventListener('click', restoreOriginal);
 
     const cols = [
       ['empresa', 'Empresa'], ['acao', 'Ação hoje'], ['tier', 'Tier'], ['score', 'Score'],
@@ -408,6 +445,7 @@
       if (leadSort.key === k) leadSort.dir *= -1; else { leadSort.key = k; leadSort.dir = (k === 'score') ? -1 : 1; }
       paintLeads();
     }));
+    syncToolbar();
     paintLeads();
   }
   function sel(id, label, opts) {
@@ -466,7 +504,7 @@
       const a = actionOf(l), conf = l.confianca || '—';
       const tr = el('tr', 'row-toggle');
       tr.innerHTML =
-        '<td><div class="cell-emp">' + esc(l.empresa) + '<span class="seg">' + esc(l.segmento) + '</span></div></td>' +
+        '<td><div class="emp-wrap"><span class="emp-chev' + (openRows.has(l.empresa) ? ' open' : '') + '">' + icon('chevR') + '</span><div class="cell-emp">' + esc(l.empresa) + '<span class="seg">' + esc(l.segmento) + '</span></div></div></td>' +
         '<td><span class="badge ' + a.cls + '"><span class="dot" style="background:currentColor;opacity:.9"></span>' + esc(a.label) + '</span></td>' +
         '<td><span class="tier tier-' + l.tier + '">' + l.tier + '</span></td>' +
         '<td><span class="score-pill" style="color:' + scoreColor(l.score) + '">' + (l.score != null ? l.score : '—') + '</span></td>' +
@@ -488,40 +526,85 @@
     else { openRows.add(l.empresa); }
     paintLeads();
   }
+  const CONF_GUIDE = {
+    'Alta': { txt: 'Pode chamar direto — é o dono mesmo.', cls: 'conf-Alta' },
+    'Média': { txt: 'Dá uma conferida no perfil antes de mandar.', cls: 'conf-Média' },
+    'Baixa': { txt: 'Vá pelo canal da empresa — o dono não está confirmado.', cls: 'conf-Baixa' },
+  };
+  function bestChannel(l, dec) {
+    const order = [];
+    if (l.canal === 'WhatsApp') order.push(['whatsapp', 'Chamar no WhatsApp', waLink(l.whatsapp) || waLink(l.contato) || (dec && waLink(extractPhone(dec.telWhatsapp))) || (dec && waLink(extractPhone(dec.canalReserva)))]);
+    if (l.canal === 'Instagram DM') order.push(['instagram', 'Mandar DM no Instagram', igLink(l.contato) || igLink(l.instagram) || (dec && igLink(dec.instagram))]);
+    if (l.canal === 'LinkedIn') order.push(['linkedin', 'Abrir no LinkedIn', liLink(l.contato) || (dec && liLink(dec.linkedin))]);
+    for (let i = 0; i < order.length; i++) if (order[i][2]) return { ico: order[i][0], label: order[i][1], href: order[i][2] };
+    const wa = waLink(l.whatsapp) || waLink(l.contato), ig = igLink(l.instagram) || igLink(l.contato), li = liLink(l.contato);
+    if (wa) return { ico: 'whatsapp', label: 'Chamar no WhatsApp', href: wa };
+    if (ig) return { ico: 'instagram', label: 'Mandar DM no Instagram', href: ig };
+    if (li) return { ico: 'linkedin', label: 'Abrir no LinkedIn', href: li };
+    return null;
+  }
+  function allContacts(l, dec) {
+    const seen = new Set(), out = [];
+    const add = (ico, label, href) => { if (href && !seen.has(href)) { seen.add(href); out.push({ ico: ico, label: label, href: href }); } };
+    add('whatsapp', 'WhatsApp', waLink(l.whatsapp) || waLink(l.contato) || (dec && waLink(extractPhone(dec.telWhatsapp))) || (dec && waLink(extractPhone(dec.canalReserva))));
+    add('instagram', 'Instagram', igLink(l.instagram) || igLink(l.contato) || (dec && igLink(dec.instagram)));
+    add('linkedin', 'LinkedIn', liLink(l.contato) || (dec && liLink(dec.linkedin)));
+    add('globe', 'Site', siteLink(l.site));
+    if (l.email) add('source', 'E-mail', 'mailto:' + l.email);
+    return out;
+  }
   function detailRow(l) {
     const tr = el('tr', 'detail');
     const td = el('td'); td.colSpan = 8;
-    const links = contactButtons(l);
-    const statusSel = '<select class="status-select" data-emp="' + esc(l.empresa) + '">' +
+    const dec = decisorFor(l.empresa);
+    const decName = isReal(l.decisor) ? l.decisor : (dec && isReal(dec.decisor) ? dec.decisor : '');
+    const cargo = (dec && dec.cargo) || '';
+    const conf = l.confianca || (dec && dec.confianca) || '';
+    const guide = CONF_GUIDE[conf];
+    const primary = bestChannel(l, dec);
+    const contacts = allContacts(l, dec).filter((c) => !primary || c.href !== primary.href);
+    const porque = (dec && dec.porque) || '';
+    const telDireto = (dec && isReal(dec.telWhatsapp)) ? dec.telWhatsapp : (l.whatsapp || '');
+    const reserva = (dec && isReal(dec.canalReserva)) ? dec.canalReserva : '';
+    const statusSel = '<select class="status-select">' +
       STATUSES.map((s) => '<option value="' + esc(s) + '"' + (statusOf(l) === s ? ' selected' : '') + '>' + esc(s) + '</option>').join('') + '</select>';
     td.innerHTML =
-      '<div class="detail__inner">' +
-        '<div class="detail__block">' +
-          '<h4>Gancho de personalização</h4>' +
-          '<p class="detail__gancho">' + esc(l.gancho || '—') + '</p>' +
-        '</div>' +
-        '<div class="detail__block">' +
-          '<h4>Contatos</h4>' +
-          '<div class="detail__facts">' +
-            fact('decisores', isReal(l.decisor) ? l.decisor : 'Dono a confirmar') +
-            (l.contato ? fact('target', l.contato) : '') +
-            (l.whatsapp ? fact('phone', l.whatsapp) : '') +
-            (l.instagram ? fact('instagram', l.instagram) : '') +
-            (l.site ? fact('globe', l.site, siteLink(l.site)) : '') +
-            (l.email ? fact('source', l.email, 'mailto:' + l.email) : '') +
-            fact('pin', l.cidade || '—') +
+      '<div class="lead-detail">' +
+        '<div class="ld-main">' +
+          '<div class="ld-who">' +
+            '<div class="ld-k">Quem decide</div>' +
+            '<div class="ld-name' + (decName ? '' : ' muted') + '">' + esc(decName || 'Dono ainda não confirmado') + '</div>' +
+            (cargo ? '<div class="ld-role">' + esc(cargo) + '</div>' : '') +
           '</div>' +
+          '<div class="ld-cta">' +
+            (primary
+              ? '<a class="ld-primary" href="' + esc(primary.href) + '" target="_blank" rel="noopener">' + icon(primary.ico) + '<span>' + esc(primary.label) + '</span>' + icon('arrow') + '</a>'
+              : '<span class="ld-nochan">Sem link direto pro dono — fale pelo canal da empresa.</span>') +
+            (guide ? '<div class="ld-guide ' + guide.cls + '"><span class="dot"></span>' + esc(guide.txt) + '</div>' : '') +
+          '</div>' +
+          '<div class="ld-say"><div class="ld-k">O que dizer (gancho)</div><p>' + esc(l.gancho || '—') + '</p></div>' +
         '</div>' +
-        '<div class="detail__actions">' +
-          links +
-          '<span style="flex:1"></span>' +
-          '<span style="display:inline-flex;align-items:center;gap:8px;color:var(--text-3);font-size:12.5px">Status' + statusSel + '</span>' +
+        '<div class="ld-side">' +
+          '<div class="ld-k">Todos os contatos</div>' +
+          (contacts.length ? '<div class="ld-btns">' + contacts.map((c) => '<a class="act-btn" href="' + esc(c.href) + '" target="_blank" rel="noopener">' + icon(c.ico) + esc(c.label) + '</a>').join('') + '</div>' : '<p class="ld-dim">Use o canal da empresa.</p>') +
+          '<div class="detail__facts">' +
+            (telDireto ? fact('phone', telDireto) : '') +
+            fact('pin', l.cidade || '—') +
+            (reserva ? fact('chat', 'Reserva: ' + reserva) : '') +
+          '</div>' +
+          (porque ? '<div class="ld-why"><div class="ld-k">Por que esse caminho</div><p>' + esc(porque) + '</p></div>' : '') +
+        '</div>' +
+        '<div class="ld-foot">' +
+          '<a class="ld-link" href="#" data-dossie="1">' + icon('decisores') + 'Ver dossiê completo do dono</a>' +
+          '<span class="ld-status">Já falei? <span class="status-wrap">' + statusSel + '</span></span>' +
         '</div>' +
       '</div>';
     setTimeout(() => {
       const s = td.querySelector('.status-select');
       if (s) s.addEventListener('change', (e) => { e.stopPropagation(); setStatus(l.empresa, e.target.value); });
-      td.querySelectorAll('.detail__actions a, .status-select, .fact a').forEach((n) => n.addEventListener('click', (e) => e.stopPropagation()));
+      const dl = td.querySelector('[data-dossie]');
+      if (dl) dl.addEventListener('click', (e) => { e.preventDefault(); e.stopPropagation(); openDossie(l.empresa); });
+      td.querySelectorAll('a, select').forEach((n) => n.addEventListener('click', (e) => e.stopPropagation()));
     }, 0);
     tr.appendChild(td);
     return tr;
@@ -530,19 +613,12 @@
     const inner = href ? '<a href="' + esc(href) + '" target="_blank" rel="noopener">' + esc(text) + '</a>' : esc(text);
     return '<div class="fact">' + icon(ico) + '<span>' + inner + '</span></div>';
   }
-  function contactButtons(l) {
-    const out = [];
-    const ig = igLink(l.instagram) || (l.canal === 'Instagram DM' ? igLink(l.contato) : null);
-    const wa = waLink(l.whatsapp) || (l.canal === 'WhatsApp' ? waLink(l.contato) : null);
-    const li = liLink(l.contato);
-    const site = siteLink(l.site);
-    if (wa) out.push(btn(wa, 'whatsapp', 'WhatsApp'));
-    if (ig) out.push(btn(ig, 'instagram', 'Instagram'));
-    if (li) out.push(btn(li, 'linkedin', 'LinkedIn'));
-    if (site) out.push(btn(site, 'globe', 'Site'));
-    return out.join('') || '<span style="color:var(--text-3);font-size:12.5px">Sem link direto — use o canal da empresa.</span>';
+  function openDossie(empresa) {
+    decFilters.q = empresa.toLowerCase(); decFilters.tier = ''; decFilters.conf = '';
+    if ($('#decSearch')) $('#decSearch').value = empresa;
+    if ($('#dTier')) $('#dTier').value = ''; if ($('#dConf')) $('#dConf').value = '';
+    paintDec(); go('decisores');
   }
-  function btn(href, ico, label) { return '<a class="act-btn" href="' + esc(href) + '" target="_blank" rel="noopener">' + icon(ico) + esc(label) + '</a>'; }
   function setStatus(emp, st) {
     if (st === 'A contatar') delete overrides[emp]; else overrides[emp] = st;
     saveOverrides();
@@ -551,6 +627,130 @@
   function updateBadges() {
     const send = DATA.leads.filter((l) => actionOf(l).key === 'send').length;
     document.querySelectorAll('[data-badge="leads"]').forEach((b) => b.textContent = send);
+  }
+
+  /* ============================================================
+     IMPORTAR CSV (o usuário sobe a planilha; fica salvo no aparelho dele)
+     ============================================================ */
+  function handleCSVFile(e) {
+    const file = e.target.files && e.target.files[0];
+    e.target.value = '';
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = function () {
+      try {
+        const res = importCSVText(String(reader.result || ''));
+        toast(res.error || res.msg, res.error ? 'bad' : 'ok');
+      } catch (err) { toast('Não consegui ler esse arquivo. Confira se é um CSV exportado do Google Sheets.', 'bad'); }
+    };
+    reader.onerror = function () { toast('Falha ao abrir o arquivo.', 'bad'); };
+    reader.readAsText(file, 'utf-8');
+  }
+  function fixMoji(s) {
+    try { var b = new Uint8Array(s.length); for (var i = 0; i < s.length; i++) b[i] = s.charCodeAt(i) & 0xff; return new TextDecoder('utf-8').decode(b); } catch (e) { return s; }
+  }
+  function normH(s) {
+    return (s || '').toString().normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/[^a-z0-9 ]/g, ' ').replace(/\s+/g, ' ').trim();
+  }
+  function parseCSVrows(text) {
+    const rows = []; let row = [], field = '', i = 0, inQ = false;
+    const s = text.replace(/\r\n/g, '\n').replace(/\r/g, '\n');
+    while (i < s.length) {
+      const c = s[i];
+      if (inQ) { if (c === '"') { if (s[i + 1] === '"') { field += '"'; i += 2; continue; } inQ = false; i++; continue; } field += c; i++; continue; }
+      if (c === '"') { inQ = true; i++; continue; }
+      if (c === ',') { row.push(field); field = ''; i++; continue; }
+      if (c === '\n') { row.push(field); rows.push(row); row = []; field = ''; i++; continue; }
+      field += c; i++;
+    }
+    if (field !== '' || row.length) { row.push(field); rows.push(row); }
+    return rows;
+  }
+  function colFinder(headers) {
+    return function (exact, kws) {
+      if (exact) { var i = headers.indexOf(exact); if (i >= 0) return i; }
+      for (var j = 0; j < headers.length; j++) for (var k = 0; k < kws.length; k++) if (headers[j].indexOf(kws[k]) >= 0) return j;
+      return -1;
+    };
+  }
+  const g = (r, i) => (i >= 0 && r[i] != null) ? String(r[i]).trim() : '';
+  const toNum = (v) => { const n = parseInt(String(v).replace(/[^\d-]/g, ''), 10); return isFinite(n) ? n : null; };
+  function normConf(c) { c = (c || '').toLowerCase(); if (c.indexOf('alta') >= 0) return 'Alta'; if (c.indexOf('méd') >= 0 || c.indexOf('med') >= 0) return 'Média'; if (c.indexOf('baix') >= 0) return 'Baixa'; return ''; }
+  function normCanal(c) { var s = (c || '').toLowerCase(); if (s.indexOf('insta') >= 0) return 'Instagram DM'; if (s.indexOf('whats') >= 0) return 'WhatsApp'; if (s.indexOf('linkedin') >= 0) return 'LinkedIn'; return c || ''; }
+  function importCSVText(raw) {
+    let text = raw;
+    var mojiHits = (text.match(/[\u00c2\u00c3][\u0080-\u00bf]/g) || []).length;
+    if (mojiHits >= 3) text = fixMoji(text);
+    const rows = parseCSVrows(text).map((r) => r.map((c) => (c || '').trim()));
+    let h = -1;
+    for (let r = 0; r < rows.length && r < 15; r++) {
+      const hs = rows[r].map(normH);
+      const hasEmp = hs.indexOf('empresa') >= 0;
+      const hasMore = hs.indexOf('tier') >= 0 || hs.some((x) => x.indexOf('etapa') >= 0 || x.indexOf('score') >= 0 || x.indexOf('cargo') >= 0 || x.indexOf('decisor') >= 0);
+      if (hasEmp && hasMore) { h = r; break; }
+    }
+    if (h < 0) return { error: 'Não achei o cabeçalho (uma linha com “Empresa” e “Tier”). Exporte a aba Leads ou Decisores do Google Sheets como CSV e tente de novo.' };
+    const headers = rows[h].map(normH);
+    const find = colFinder(headers);
+    const isDec = headers.some((x) => x.indexOf('cargo') >= 0) || headers.some((x) => x.indexOf('por que') >= 0 || x.indexOf('porque') >= 0);
+    const dataRows = rows.slice(h + 1);
+    if (isDec) {
+      const ix = {
+        empresa: find('empresa', ['empresa']), tier: find('tier', ['tier']), decisor: find(null, ['decisor', 'dono']),
+        cargo: find(null, ['cargo', 'papel']), canal: find(null, ['canal principal', 'canal']), contato: find(null, ['abordar', 'contato p']),
+        instagram: find(null, ['instagram']), linkedin: find(null, ['linkedin']), telWhatsapp: find(null, ['whatsapp direto', 'tel', 'whatsapp']),
+        canalReserva: find(null, ['reserva']), confianca: find(null, ['confian']), porque: find(null, ['por que', 'porque']), fonte: find(null, ['fonte']),
+      };
+      const out = [];
+      dataRows.forEach((r) => {
+        const emp = g(r, ix.empresa); if (!emp) return;
+        const tier = g(r, ix.tier);
+        if (!/^[ABC]$/i.test(tier) && !g(r, ix.decisor) && !g(r, ix.cargo)) return;
+        out.push({ empresa: emp, tier: tier.toUpperCase(), decisor: g(r, ix.decisor), cargo: g(r, ix.cargo), canal: normCanal(g(r, ix.canal)), contato: g(r, ix.contato), instagram: g(r, ix.instagram), linkedin: g(r, ix.linkedin), telWhatsapp: g(r, ix.telWhatsapp), canalReserva: g(r, ix.canalReserva), confianca: normConf(g(r, ix.confianca)), porque: g(r, ix.porque), fonte: g(r, ix.fonte) });
+      });
+      if (!out.length) return { error: 'Li o arquivo, mas não achei linhas de decisores válidas.' };
+      mergeImport('decisores', out);
+      return { msg: out.length + ' decisores atualizados no dossiê.' };
+    }
+    const ix = {
+      empresa: find('empresa', ['empresa']), etapa: find(null, ['etapa', 'status']), tier: find('tier', ['tier']),
+      score: find(null, ['score', 'nota']), decisor: find(null, ['decisor', 'dono']), canal: find(null, ['canal principal', 'canal']),
+      contato: find(null, ['abordar', 'contato p']), confianca: find(null, ['confian']), gancho: find(null, ['gancho']),
+      resposta: find(null, ['resposta']), segmento: find(null, ['segmento']), cidade: find(null, ['cidade', 'bairro']),
+      whatsapp: find(null, ['whatsapp', 'tel']), instagram: find(null, ['instagram']), email: find(null, ['mail']), site: find('site', ['site']),
+    };
+    const out = [];
+    dataRows.forEach((r) => {
+      const emp = g(r, ix.empresa); if (!emp) return;
+      const tier = g(r, ix.tier), etapa = g(r, ix.etapa);
+      if (!/^[ABC]$/i.test(tier) && !etapa) return;
+      out.push({ empresa: emp, etapa: etapa || 'A contatar', tier: tier.toUpperCase(), score: toNum(g(r, ix.score)), decisor: g(r, ix.decisor), canal: normCanal(g(r, ix.canal)), contato: g(r, ix.contato), confianca: normConf(g(r, ix.confianca)), gancho: g(r, ix.gancho), resposta: g(r, ix.resposta) || 'Sem resposta', reuniao: '', notas: '', segmento: g(r, ix.segmento), cidade: g(r, ix.cidade), whatsapp: g(r, ix.whatsapp), instagram: g(r, ix.instagram), email: g(r, ix.email), site: g(r, ix.site), toques: 0 });
+    });
+    if (!out.length) return { error: 'Li o arquivo, mas não achei empresas válidas (linhas com Tier A/B/C ou uma etapa).' };
+    const base = new Set((BASELINE.leads || []).concat((loadImports() || {}).leads || []).map((x) => normKey(x.empresa)));
+    let novos = 0; out.forEach((r) => { if (!base.has(normKey(r.empresa))) novos++; });
+    mergeImport('leads', out);
+    return { msg: out.length + ' contatos importados — ' + novos + ' novos, ' + (out.length - novos) + ' atualizados.' };
+  }
+  function mergeImport(kind, rows) {
+    const imp = loadImports() || {};
+    imp[kind] = upsertBy(imp[kind] || [], rows, 'empresa');
+    saveImports(imp);
+    rebuildData();
+    renderLeads(); renderDecisores(); renderPainel();
+  }
+  function restoreOriginal() {
+    if (!window.confirm('Isto remove tudo que você importou e volta aos dados originais. Continuar?')) return;
+    try { localStorage.removeItem(LS_IMPORT); } catch (e) {}
+    rebuildData(); renderLeads(); renderDecisores(); renderPainel();
+    toast('Pronto — voltei aos dados originais.', 'ok');
+  }
+  function toast(msg, kind) {
+    let t = $('#toast');
+    if (!t) { t = el('div'); t.id = 'toast'; document.body.appendChild(t); }
+    t.className = 'toast show ' + (kind === 'bad' ? 'toast--bad' : 'toast--ok');
+    t.innerHTML = icon(kind === 'bad' ? 'info' : 'check') + '<span>' + esc(msg) + '</span>';
+    clearTimeout(toast._t); toast._t = setTimeout(function () { t.className = 'toast'; }, 4500);
   }
 
   /* ============================================================
@@ -637,8 +837,9 @@
     const cards = [
       { feature: true, ico: 'bolt', title: 'A coluna “Ação hoje” é o cérebro', body: ['Ela lê a etapa de cada lead e te diz o que fazer agora — sem você decidir nada na mão.', 'Verde = aja (manda hoje). Amarelo = aguarde. Azul = em conversa. Cinza = encerrado. Comece sempre pelos verdes.'], legend: [['Enviar', 'var(--ok)'], ['Aguardar', 'var(--warn)'], ['Em conversa', 'var(--info)'], ['Encerrado', 'var(--text-3)']] },
       { ico: 'painel', title: 'As cinco telas, em ordem', body: ['Painel = visão geral com gráficos. Leads = onde você trabalha todo dia. Decisores = o dossiê de quem decide. Cadência = o ritmo dos toques. E esta, Como usar.'] },
-      { ico: 'leads', title: 'Seu ciclo diário (5 minutos)', body: ['Na aba Leads, ligue “Só ação de hoje”. Mande as mensagens. A cada envio, abra a linha e mude o status para “Contatado”. Só isso.'] },
-      { ico: 'decisores', title: 'Quem abordar e por onde', body: ['Decisor = o nome do dono. Canal = o melhor caminho até ele. O botão abre direto o @, o LinkedIn ou o WhatsApp.', 'Confiança alta: pode ir direto. Média: confira o perfil antes. Baixa: vá pelo canal da empresa.'] },
+      { ico: 'leads', title: 'Seu ciclo diário (5 minutos)', body: ['Na aba Leads, ligue “Só ação de hoje”. Clique numa empresa, aperte “Falar agora” pra abrir o canal certo, e mande a mensagem.', 'Mandou? Ali mesmo, em “Já falei?”, mude pra “Contatado”. Só isso.'] },
+      { ico: 'decisores', title: 'Abra a empresa — tudo numa tela', body: ['Clicou na empresa, você já vê: quem é o dono, o cargo, o melhor canal (botão direto), o que dizer e os outros contatos.', 'Confiança verde: pode ir direto. Amarela: confira o perfil antes. Vermelha: vá pelo canal da empresa.'] },
+      { ico: 'upload', title: 'Adicionar novos contatos', body: ['Tem leads novos? Na aba Leads, clique em “Importar planilha” e suba o CSV (no Google Sheets: Arquivo → Fazer download → CSV).', 'Empresas novas entram, as que já existem são atualizadas. Quer voltar atrás? “Restaurar original”.'] },
       { ico: 'chat', title: 'Quando mandar (e quando não)', body: ['Mande quando estiver verde. Não insista no amarelo — apertar antes da hora queima o lead.', 'Respondeu? Mude o status para “Em conversa”. Pediu pra parar? “Não contatar”.'] },
       { ico: 'cadencia', title: 'A cadência', body: ['1º contato → 3 dias → follow-up 1 → 4 dias → follow-up 2 → 7 dias → follow-up 3 → encerra.', 'Cada toque traz algo novo (um print, um dado), nunca um “só passando pra ver”. Troque de canal entre um toque e outro.'] },
     ];
