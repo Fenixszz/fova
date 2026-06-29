@@ -130,10 +130,22 @@
     return JSON.parse(new TextDecoder().decode(plain));
   }
 
+  // show/hide password toggle
+  (function () {
+    const eye = $('#lockEye'), inp = $('#lockInput');
+    if (eye && inp) eye.addEventListener('click', () => {
+      const show = inp.type === 'password';
+      inp.type = show ? 'text' : 'password';
+      eye.classList.toggle('is-on', show);
+      eye.setAttribute('aria-label', show ? 'Ocultar senha' : 'Mostrar senha');
+      inp.focus();
+    });
+  })();
+
   $('#lockForm').addEventListener('submit', async (e) => {
     e.preventDefault();
     const input = $('#lockInput'), err = $('#lockErr');
-    const btn = e.target.querySelector('button');
+    const btn = e.target.querySelector('.lock__btn');
     btn.disabled = true; err.textContent = '';
     const ok = await tryUnlock(input.value.trim());
     if (ok) {
