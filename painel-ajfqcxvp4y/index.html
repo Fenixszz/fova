@@ -9,15 +9,21 @@
   <script>
     /* Reporta erros na própria tela de senha — assim falhas não ficam silenciosas. */
     window.__admReady = false;
-    window.__admShowErr = function (m) {
-      var put = function () { var e = document.getElementById('lockErr'); if (e) e.textContent = m; };
+    window.__admErrReal = false;
+    window.__admShowErr = function (m, real) {
+      if (window.__admErrReal && !real) return;       // não apaga o erro real com o aviso genérico
+      if (real) window.__admErrReal = true;
+      var put = function () { var e = document.getElementById('lockErr'); if (e) { e.textContent = m; e.style.whiteSpace = 'normal'; } };
       if (document.getElementById('lockErr')) put(); else document.addEventListener('DOMContentLoaded', put);
     };
     window.addEventListener('error', function (e) {
-      window.__admShowErr('Erro técnico: ' + ((e && e.message) || 'falha ao carregar script') + ' — me mande este texto.');
-    });
+      var t = e && e.target, msg;
+      if (t && (t.src || t.href)) msg = 'arquivo não carregou (' + String(t.src || t.href).split('/').pop().split('?')[0] + ')';
+      else msg = (e && e.message) || 'erro de script';
+      window.__admShowErr('Erro: ' + msg + ' — me mande este texto.', true);
+    }, true);                                          // capture = também pega arquivos que falham
     window.addEventListener('unhandledrejection', function (e) {
-      window.__admShowErr('Erro técnico: ' + ((e && e.reason && e.reason.message) || (e && e.reason) || 'falha') + ' — me mande este texto.');
+      window.__admShowErr('Erro: ' + ((e && e.reason && e.reason.message) || (e && e.reason) || 'falha') + ' — me mande este texto.', true);
     });
   </script>
   <link rel="preconnect" href="https://fonts.googleapis.com" />
@@ -511,11 +517,11 @@
     })();
     window.addEventListener('load', function () {
       setTimeout(function () {
-        if (!window.__admReady) window.__admShowErr('O painel não terminou de carregar aqui. Recarregue a página (puxe a tela pra baixo). Se continuar, me avise.');
-      }, 2000);
+        if (!window.__admReady) window.__admShowErr('Não iniciou [dados:' + (window.CRM_ENC ? 'ok' : 'X') + ' · gráficos:' + (typeof Chart !== 'undefined' ? 'ok' : 'X') + ' · app:' + (window.__admReady ? 'ok' : 'X') + ']. Me mande este texto.', false);
+      }, 2500);
     });
   </script>
-  <script src="crm-data.enc.js?v=4"></script>
-  <script src="app.js?v=4"></script>
+  <script src="crm-data.enc.js?v=5"></script>
+  <script src="app.js?v=5"></script>
 </body>
 </html>
