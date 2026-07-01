@@ -24,3 +24,7 @@ Truus.co-Awwward-Website/
 
 # Planilha-fonte exportada (dados em texto puro — nunca publicar)
 FOVA - CRM de Leads/
+
+# CRM dev helpers (dados fake — não publicar / não versionar)
+painel-ajfqcxvp4y/_preview.html
+painel-ajfqcxvp4y/_sample-data.js
