@@ -821,11 +821,13 @@ window.CRM_ENC = {"salt":"etWMD1AXOF77tYAYY4hIlg==","iv":"TXLvfjzNy/w/u26/","ct"
     deleted = {}; saveDeleted(); rebuildData(); rerenderAll();
     toast('Contatos apagados restaurados.', 'ok');
   }
-  // todo "Contatado" sem data ganha a data de hoje (senão o follow-up não saberia contar)
+  // "Contatado" sem data conhecida (veio "Contatado" da planilha, ou o navegador perdeu o registro):
+  // não dá pra saber QUANDO foi contatado, então já entra como follow-up devido — em vez de reiniciar
+  // a contagem de 3 dias a cada carregamento (o que fazia o lead nunca chegar na coluna Follow-up).
   function backfillTouch() {
     if (!DATA) return;
     let changed = false;
-    DATA.leads.forEach((l) => { if (statusOf(l) === 'Contatado' && !touch[l.empresa]) { touch[l.empresa] = Date.now(); changed = true; } });
+    DATA.leads.forEach((l) => { if (statusOf(l) === 'Contatado' && !touch[l.empresa]) { touch[l.empresa] = Date.now() - FOLLOWUP_MS; changed = true; } });
     if (changed) saveTouch();
   }
   function decisorFor(empresa) {
