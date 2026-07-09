@@ -321,6 +321,26 @@
     .lead__chev svg { width: 17px; height: 17px; }
     .lead.is-open .lead__chev { transform: rotate(90deg); color: var(--brand); }
     .lead__mid { min-width: 0; }
+
+    /* ===== modo selecionar + arquivo ===== */
+    .lead__check { width: 22px; height: 22px; border-radius: 7px; border: 1.6px solid var(--line); display: grid; place-items: center; color: transparent; transition: background .14s, border-color .14s, color .14s; }
+    .lead__check svg { width: 14px; height: 14px; }
+    .lead--select .lead__row { cursor: pointer; }
+    .lead--select:hover { border-color: rgba(203,169,110,.3); }
+    .lead.is-checked { border-color: rgba(203,169,110,.55); background: rgba(203,169,110,.05); }
+    .lead.is-checked .lead__check { background: var(--brand); border-color: var(--brand); color: #1a1408; }
+    .selbar { position: sticky; top: 6px; z-index: 30; display: flex; align-items: center; gap: 12px; flex-wrap: wrap; padding: 11px 14px; margin: 0 0 14px; border-radius: 13px; background: linear-gradient(180deg, var(--bg-2), var(--bg-1)); border: 1px solid rgba(203,169,110,.32); box-shadow: var(--shadow-2); }
+    .selbar[hidden] { display: none; }
+    .selbar__all { display: inline-flex; align-items: center; gap: 9px; color: var(--text); font-size: 14px; font-weight: 500; cursor: pointer; user-select: none; }
+    .selbar__all input { width: 18px; height: 18px; accent-color: var(--brand); cursor: pointer; }
+    .selbar__count { color: var(--text-2); font-size: 13px; }
+    .selbar__actions { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+    @media (min-width: 721px) { .selbar__actions { margin-left: auto; } }
+    .selbar .btn-ghost { height: 40px; }
+    .selbar__stage { height: 40px; }
+    .selbar__del:not(:disabled):hover { border-color: rgba(216,138,110,.6); color: var(--bad); }
+    .selbar .btn-ghost:disabled, .selbar__stage:disabled { opacity: .42; cursor: not-allowed; }
+    .selbar .btn-ghost:disabled:hover { color: var(--text-2); border-color: var(--line); }
     .lead__emp { font-size: 15.5px; font-weight: 600; color: var(--text); display: flex; align-items: center; gap: 9px; flex-wrap: wrap; }
     .lead__meta { font-size: 12.5px; color: var(--text-3); margin-top: 3px; }
     .lead__meta .lead__dec { color: var(--text-2); font-weight: 500; }

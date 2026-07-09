@@ -34,6 +34,7 @@
     chevL: '<path d="M15 6l-6 6 6 6"/>',
     trash: '<path d="M4 7h16M9 7V5a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2M6 7l1 13a1 1 0 0 0 1 1h8a1 1 0 0 0 1-1l1-13M10 11v6M14 11v6"/>',
     download: '<path d="M12 4v10M8 10l4 4 4-4M5 19h14"/>',
+    archive: '<rect x="3" y="4" width="18" height="4" rx="1"/><path d="M5 8v11a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1V8"/><path d="M10 12h4"/>',
     crown: '<path d="M4 18h16M5 18l-1.5-9 4.5 3.5L12 5l4 7.5L20.5 9 19 18"/>',
     building: '<path d="M5 21V5a1 1 0 0 1 1-1h8a1 1 0 0 1 1 1v16M15 9h3a1 1 0 0 1 1 1v11M3 21h18M8 8h2M8 12h2M8 16h2"/>',
     source: '<path d="M10 13a4 4 0 0 0 5.7 0l2.5-2.5a4 4 0 0 0-5.7-5.7L11 6"/><path d="M14 11a4 4 0 0 0-5.7 0L5.8 13.5a4 4 0 0 0 5.7 5.7L13 18"/>',
@@ -79,15 +80,18 @@
   const LS_KEY = 'fova_crm_status_v1';
   const LS_TOUCH = 'fova_crm_touch_v1';
   const LS_DELETED = 'fova_crm_deleted_v1';
+  const LS_ARCHIVED = 'fova_crm_archived_v1';
   const FOLLOWUP_DAYS = 3;                              // depois de abordar, cobra em 3 dias
   const FOLLOWUP_MS = FOLLOWUP_DAYS * 86400000;
-  let overrides = {}, touch = {}, deleted = {};
+  let overrides = {}, touch = {}, deleted = {}, archived = {};
   try { overrides = JSON.parse(localStorage.getItem(LS_KEY) || '{}'); } catch (e) { overrides = {}; }
   try { touch = JSON.parse(localStorage.getItem(LS_TOUCH) || '{}'); } catch (e) { touch = {}; }
   try { deleted = JSON.parse(localStorage.getItem(LS_DELETED) || '{}'); } catch (e) { deleted = {}; }
+  try { archived = JSON.parse(localStorage.getItem(LS_ARCHIVED) || '{}'); } catch (e) { archived = {}; }
   function saveOverrides() { try { localStorage.setItem(LS_KEY, JSON.stringify(overrides)); } catch (e) {} }
   function saveTouch() { try { localStorage.setItem(LS_TOUCH, JSON.stringify(touch)); } catch (e) {} }
   function saveDeleted() { try { localStorage.setItem(LS_DELETED, JSON.stringify(deleted)); } catch (e) {} }
+  function saveArchived() { try { localStorage.setItem(LS_ARCHIVED, JSON.stringify(archived)); } catch (e) {} }
   const STATUSES = ['A contatar', 'Contatado', 'Em conversa', 'Reunião marcada', 'Ganho', 'Perdido', 'Não contatar'];
   function statusOf(lead) { return overrides[lead.empresa] || lead.etapa || 'A contatar'; }
   function waitingDays(lead) { const t = touch[lead.empresa]; if (!t) return null; return Math.floor((Date.now() - t) / 86400000); }
@@ -166,10 +170,9 @@
     const imp = loadImports() || {};
     let leads = (imp.leads && imp.leads.length) ? upsertBy(BASELINE.leads, imp.leads, 'empresa') : BASELINE.leads.slice();
     let decs = (imp.decisores && imp.decisores.length) ? upsertBy(BASELINE.decisores, imp.decisores, 'empresa') : BASELINE.decisores.slice();
-    if (Object.keys(deleted).length) {                 // contatos apagados pelo João ficam escondidos
-      leads = leads.filter((l) => !deleted[normKey(l.empresa)]);
-      decs = decs.filter((d) => !deleted[normKey(d.empresa)]);
-    }
+    const hidden = (k) => deleted[k] || archived[k];   // apagados E arquivados somem da lista e do quadro
+    leads = leads.filter((l) => !hidden(normKey(l.empresa)));
+    decs = decs.filter((d) => !hidden(normKey(d.empresa)));
     DATA = { leads: leads, decisores: decs, config: BASELINE.config, comoUsar: BASELINE.comoUsar, painel: BASELINE.painel };
     backfillTouch();
     _decIndex = null;
@@ -184,6 +187,41 @@
     if (!window.confirm('Trazer de volta todos os contatos apagados?')) return;
     deleted = {}; saveDeleted(); rebuildData(); rerenderAll();
     toast('Contatos apagados restaurados.', 'ok');
+  }
+  /* ---------- arquivo (leads velhos: saem da lista mas ficam guardados pra exportar) ---------- */
+  function archivedCount() { return Object.keys(archived).length; }
+  function archiveLeads(emps, opts) {
+    opts = opts || {};
+    const keys = [];
+    (emps || []).forEach((emp) => {
+      const lead = DATA.leads.find((l) => l.empresa === emp); if (!lead) return;
+      const dec = decisorFor(emp);
+      const k = normKey(emp);
+      archived[k] = { lead: Object.assign({}, lead, { etapa: statusOf(lead) }), dec: dec ? Object.assign({}, dec) : null };
+      keys.push(k);
+    });
+    if (!keys.length) return 0;
+    saveArchived(); rebuildData(); rerenderAll();
+    if (!opts.silent) {
+      const n = keys.length;
+      toastUndo(n + (n === 1 ? ' lead arquivado.' : ' leads arquivados.'), function () {
+        keys.forEach((k) => delete archived[k]); saveArchived(); rebuildData(); rerenderAll();
+      });
+    }
+    return keys.length;
+  }
+  function archiveAll() {
+    if (!DATA || !DATA.leads.length) { toast('Não há leads pra arquivar.', 'bad'); return; }
+    const n = DATA.leads.length;
+    if (!window.confirm('Arquivar todos os ' + n + ' leads?\n\nEles saem da sua lista e do quadro, mas ficam guardados no arquivo — dá pra exportar em CSV quando quiser. Nada é apagado de verdade.')) return;
+    archiveLeads(DATA.leads.map((l) => l.empresa), { silent: true });
+    toast(n + ' leads arquivados. Use "arquivados" na barra pra exportar.', 'ok');
+  }
+  function restoreArchived() {
+    if (!archivedCount()) return;
+    if (!window.confirm('Trazer todos os leads arquivados de volta pra sua lista?')) return;
+    archived = {}; saveArchived(); rebuildData(); rerenderAll();
+    toast('Leads arquivados restaurados.', 'ok');
   }
   // "Contatado" sem data conhecida (veio "Contatado" da planilha, ou o navegador perdeu o registro):
   // não dá pra saber QUANDO foi contatado, então já entra como follow-up devido — em vez de reiniciar
@@ -574,10 +612,13 @@
   const leadFilters = { q: '', seg: '', acao: false };
   let leadSort = 'prioridade';
   const openRows = new Set();
+  let selectMode = false;
+  const selected = new Set();
 
   function renderLeads() {
     const segs = [...new Set(DATA.leads.map((l) => segCat(l.segmento)))].sort();
     const tb = $('#leadsToolbar');
+    const arch = archivedCount();
     tb.innerHTML =
       '<div class="search">' + icon('search') + '<input id="leadSearch" type="search" placeholder="Empresa, dono, telefone, @ ou LinkedIn…" aria-label="Buscar leads" /></div>' +
       '<button class="chip" id="chipAcao" type="button" aria-pressed="false">' + icon('bolt') + 'Só ação de hoje</button>' +
@@ -588,8 +629,12 @@
       '</select>' +
       sel('fSeg', 'Segmento', [['', 'Todos os segmentos']].concat(segs.map((s) => [s, s]))) +
       '<span class="tb-spacer"></span>' +
+      '<button class="chip' + (selectMode ? ' is-on' : '') + '" id="chipSelect" type="button" aria-pressed="' + selectMode + '" title="Selecionar vários leads de uma vez">' + icon('check') + (selectMode ? 'Sair da seleção' : 'Selecionar') + '</button>' +
       '<button class="btn-import" id="btnImport" type="button" title="Suba a planilha (CSV) com novos contatos">' + icon('upload') + 'Importar planilha</button>' +
       '<button class="btn-export" id="btnExport" type="button" title="Baixar seus leads em CSV">' + icon('download') + 'Exportar planilha</button>' +
+      '<button class="btn-ghost" id="btnArchiveAll" type="button" title="Tira todos os leads da lista e guarda no arquivo (dá pra exportar depois)">' + icon('archive', 15) + 'Arquivar todos</button>' +
+      (arch ? '<button class="btn-ghost" id="btnExportArch" type="button" title="Baixar em CSV os leads arquivados">' + icon('archive', 15) + arch + ' arquivado' + (arch === 1 ? '' : 's') + ' · exportar</button>' : '') +
+      (arch ? '<button class="btn-ghost" id="btnRestoreArch" type="button" title="Trazer os arquivados de volta pra lista">restaurar</button>' : '') +
       (loadImports() ? '<button class="btn-ghost" id="btnRestore" type="button" title="Voltar aos dados originais">Restaurar original</button>' : '') +
       (deletedCount() ? '<button class="btn-ghost" id="btnRestoreDel" type="button" title="Trazer de volta os contatos apagados">' + icon('trash', 15) + deletedCount() + ' apagado' + (deletedCount() === 1 ? '' : 's') + ' · restaurar</button>' : '') +
       '<input type="file" id="csvInput" accept=".csv,text/csv,text/plain" hidden />';
@@ -598,14 +643,91 @@
     $('#chipAcao').addEventListener('click', () => { leadFilters.acao = !leadFilters.acao; syncToolbar(); paintLeads(); });
     $('#fSeg').addEventListener('change', (e) => { leadFilters.seg = e.target.value; paintLeads(); });
     $('#fOrd').addEventListener('change', (e) => { leadSort = e.target.value; paintLeads(); });
+    $('#chipSelect').addEventListener('click', toggleSelectMode);
     $('#btnImport').addEventListener('click', () => $('#csvInput').click());
     $('#btnExport').addEventListener('click', exportCSV);
+    $('#btnArchiveAll').addEventListener('click', archiveAll);
     $('#csvInput').addEventListener('change', handleCSVFile);
+    const bea = $('#btnExportArch'); if (bea) bea.addEventListener('click', exportArchivedCSV);
+    const bra = $('#btnRestoreArch'); if (bra) bra.addEventListener('click', restoreArchived);
     const br = $('#btnRestore'); if (br) br.addEventListener('click', restoreOriginal);
     const brd = $('#btnRestoreDel'); if (brd) brd.addEventListener('click', restoreDeleted);
 
+    ensureSelectBar();
     syncToolbar();
     paintLeads();
+  }
+  /* ---------- seleção em massa ---------- */
+  function toggleSelectMode() { selectMode = !selectMode; if (!selectMode) selected.clear(); renderLeads(); }
+  function ensureSelectBar() {
+    let bar = $('#leadsSelectBar');
+    if (!bar) {
+      const list = $('#leadList');
+      bar = el('div', 'selbar'); bar.id = 'leadsSelectBar';
+      list.parentNode.insertBefore(bar, list);
+    }
+    renderSelectBar();
+  }
+  function renderSelectBar() {
+    const bar = $('#leadsSelectBar'); if (!bar) return;
+    if (!selectMode) { bar.hidden = true; bar.innerHTML = ''; return; }
+    bar.hidden = false;
+    bar.innerHTML =
+      '<label class="selbar__all"><input type="checkbox" id="selAll" /><span>Selecionar tudo</span></label>' +
+      '<span class="selbar__count" id="selCount"></span>' +
+      '<div class="selbar__actions">' +
+        '<button class="btn-ghost" id="selExport" type="button">' + icon('download', 15) + 'Exportar' + '</button>' +
+        '<select class="select selbar__stage" id="selStage" aria-label="Mudar etapa dos selecionados">' +
+          '<option value="">Mudar etapa…</option>' +
+          STATUSES.map((x) => '<option value="' + esc(x) + '">' + esc(x) + '</option>').join('') +
+        '</select>' +
+        '<button class="btn-ghost selbar__del" id="selDelete" type="button">' + icon('trash', 15) + 'Excluir' + '</button>' +
+      '</div>';
+    $('#selAll').addEventListener('change', selectAllVisible);
+    $('#selExport').addEventListener('click', () => exportLeadsList([...selected]));
+    $('#selDelete').addEventListener('click', deleteSelected);
+    $('#selStage').addEventListener('change', (e) => { const v = e.target.value; e.target.value = ''; if (v) restageSelected(v); });
+    refreshSelectBar();
+  }
+  function refreshSelectBar() {
+    if (!selectMode) return;
+    const n = selected.size;
+    const cnt = $('#selCount'); if (cnt) cnt.textContent = n ? (n + (n === 1 ? ' selecionado' : ' selecionados')) : 'nenhum selecionado';
+    ['selExport', 'selDelete', 'selStage'].forEach((id) => { const e = $('#' + id); if (e) e.disabled = (n === 0); });
+    const all = $('#selAll');
+    if (all) {
+      const rows = filteredLeads();
+      const allSel = rows.length > 0 && rows.every((l) => selected.has(l.empresa));
+      all.checked = allSel;
+      all.indeterminate = !allSel && rows.some((l) => selected.has(l.empresa));
+    }
+  }
+  function selectAllVisible() {
+    const rows = filteredLeads();
+    const allSel = rows.length > 0 && rows.every((l) => selected.has(l.empresa));
+    if (allSel) rows.forEach((l) => selected.delete(l.empresa));
+    else rows.forEach((l) => selected.add(l.empresa));
+    paintLeads();
+  }
+  function toggleSelected(emp) { if (selected.has(emp)) selected.delete(emp); else selected.add(emp); paintLeads(); }
+  function restageSelected(st) {
+    if (!selected.size) return;
+    const n = selected.size;
+    selected.forEach((emp) => {
+      if (st === 'A contatar') delete overrides[emp]; else overrides[emp] = st;
+      if (st === 'Contatado') touch[emp] = Date.now(); else delete touch[emp];
+    });
+    saveOverrides(); saveTouch(); rerenderAll();
+    toast(n + (n === 1 ? ' lead movido' : ' leads movidos') + ' para "' + st + '".', 'ok');
+  }
+  function deleteSelected() {
+    const emps = [...selected]; if (!emps.length) return;
+    const n = emps.length;
+    emps.forEach((emp) => { deleted[normKey(emp)] = 1; });
+    saveDeleted(); selected.clear(); rebuildData(); rerenderAll();
+    toastUndo(n + (n === 1 ? ' lead apagado.' : ' leads apagados.'), function () {
+      emps.forEach((emp) => delete deleted[normKey(emp)]); saveDeleted(); rebuildData(); rerenderAll();
+    });
   }
   function sel(id, label, opts) {
     return '<select class="select" id="' + id + '" aria-label="' + esc(label) + '">' + opts.map((o) => '<option value="' + esc(o[0]) + '">' + esc(o[1]) + '</option>').join('') + '</select>';
@@ -641,6 +763,7 @@
     const rows = filteredLeads();
     $('#leadsCount').innerHTML = '<b>' + rows.length + '</b> ' + (rows.length === 1 ? 'lead' : 'leads') +
       (leadFilters.acao ? ' na fila de hoje' : '') + (rows.length !== DATA.leads.length ? ' · de ' + DATA.leads.length : '');
+    refreshSelectBar();
     const list = $('#leadList'); list.innerHTML = '';
     if (!rows.length) {
       list.innerHTML = '<div class="empty">' + icon('search', 42) + '<b>Nenhum lead com esses filtros.</b><div>Limpe a busca ou troque o segmento.</div></div>';
@@ -650,12 +773,16 @@
   }
   function leadCard(l) {
     const a = actionOf(l), s = donoStatus(l);
-    const open = openRows.has(l.empresa);
-    const wrap = el('div', 'lead' + (open ? ' is-open' : ''));
     const meta = [segCat(l.segmento), bairro(l.cidade)].filter(Boolean).join(' · ');
+    const open = !selectMode && openRows.has(l.empresa);
+    const checked = selectMode && selected.has(l.empresa);
+    const wrap = el('div', 'lead' + (open ? ' is-open' : '') + (selectMode ? ' lead--select' : '') + (checked ? ' is-checked' : ''));
     const row = el('button', 'lead__row'); row.type = 'button';
+    const head = selectMode
+      ? '<span class="lead__check">' + icon('check') + '</span>'
+      : '<span class="lead__chev">' + icon('chevR') + '</span>';
     row.innerHTML =
-      '<span class="lead__chev">' + icon('chevR') + '</span>' +
+      head +
       '<div class="lead__mid">' +
         '<div class="lead__emp">' + esc(l.empresa) + '</div>' +
         '<div class="lead__meta">' + esc(meta) +
@@ -663,7 +790,12 @@
         '</div>' +
       '</div>' +
       '<div class="lead__right"><span class="badge ' + a.cls + '"><span class="dot"></span>' + esc(a.label) + '</span></div>';
-    row.addEventListener('click', () => { if (openRows.has(l.empresa)) openRows.delete(l.empresa); else openRows.add(l.empresa); paintLeads(); });
+    if (selectMode) {
+      row.setAttribute('role', 'checkbox'); row.setAttribute('aria-checked', String(checked));
+      row.addEventListener('click', () => toggleSelected(l.empresa));
+    } else {
+      row.addEventListener('click', () => { if (openRows.has(l.empresa)) openRows.delete(l.empresa); else openRows.add(l.empresa); paintLeads(); });
+    }
     wrap.appendChild(row);
     if (open) wrap.appendChild(leadDetail(l));
     return wrap;
@@ -893,42 +1025,59 @@
      ============================================================ */
   function csvCell(v) { const s = (v == null ? '' : String(v)); return /[",\n\r]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s; }
   function fileDate() { try { const d = new Date(); return d.getFullYear() + '-' + ('0' + (d.getMonth() + 1)).slice(-2) + '-' + ('0' + d.getDate()).slice(-2); } catch (e) { return 'export'; } }
-  function exportCSV() {
-    if (!DATA || !DATA.leads.length) { toast('Não há leads para exportar.', 'bad'); return; }
-    const R = (v) => isReal(v) ? String(v).trim() : '';
-    const cols = [
-      ['Nome da empresa', (l) => l.empresa],
-      ['Segmento', (l) => l.segmento],
-      ['Cidade / Bairro', (l) => l.cidade],
-      ['Site', (l) => R(l.site)],
-      ['Instagram da empresa', (l) => R(l.instagram)],
-      ['LinkedIn da empresa', (l) => R(l.linkedinEmpresa)],
-      ['WhatsApp / Tel da empresa', (l) => R(l.whatsapp)],
-      ['E-mail da empresa', (l) => R(l.email)],
-      ['Nome do decisor', (l, d) => (d && isReal(d.decisor)) ? d.decisor.trim() : (isReal(l.decisor) ? l.decisor.trim() : '')],
-      ['Cargo', (l, d) => R(d && d.cargo)],
-      ['Instagram pessoal', (l, d) => R(d && d.instagram)],
-      ['LinkedIn pessoal', (l, d) => R(d && d.linkedin)],
-      ['WhatsApp / Tel pessoal', (l, d) => R(d && d.telWhatsapp)],
-      ['E-mail pessoal', (l, d) => R(d && d.emailPessoal)],
-      ['Canal principal', (l) => R(l.canal)],
-      ['Canal reserva', (l, d) => R(l.canalReserva) || R(d && d.canalReserva)],
-      ['Gancho de personalização', (l) => R(l.gancho)],
-      ['Fonte', (l, d) => R(l.fonte) || R(d && d.fonte)],
-      ['Etapa (CRM)', (l) => statusOf(l)],
-    ];
-    const rows = DATA.leads.slice().sort((a, b) => a.empresa.localeCompare(b.empresa, 'pt-BR'));
-    const lines = [cols.map((c) => csvCell(c[0])).join(',')];
-    rows.forEach((l) => { const d = decisorFor(l.empresa); lines.push(cols.map((c) => csvCell(c[1](l, d))).join(',')); });
-    const csv = '\ufeff' + lines.join('\r\n') + '\r\n';   // BOM p/ acentos abrirem certo no Excel/Sheets
+  const CSV_R = (v) => isReal(v) ? String(v).trim() : '';
+  const CSV_COLS = [
+    ['Nome da empresa', (l) => l.empresa],
+    ['Segmento', (l) => l.segmento],
+    ['Cidade / Bairro', (l) => l.cidade],
+    ['Site', (l) => CSV_R(l.site)],
+    ['Instagram da empresa', (l) => CSV_R(l.instagram)],
+    ['LinkedIn da empresa', (l) => CSV_R(l.linkedinEmpresa)],
+    ['WhatsApp / Tel da empresa', (l) => CSV_R(l.whatsapp)],
+    ['E-mail da empresa', (l) => CSV_R(l.email)],
+    ['Nome do decisor', (l, d) => (d && isReal(d.decisor)) ? d.decisor.trim() : (isReal(l.decisor) ? l.decisor.trim() : '')],
+    ['Cargo', (l, d) => CSV_R(d && d.cargo)],
+    ['Instagram pessoal', (l, d) => CSV_R(d && d.instagram)],
+    ['LinkedIn pessoal', (l, d) => CSV_R(d && d.linkedin)],
+    ['WhatsApp / Tel pessoal', (l, d) => CSV_R(d && d.telWhatsapp)],
+    ['E-mail pessoal', (l, d) => CSV_R(d && d.emailPessoal)],
+    ['Canal principal', (l) => CSV_R(l.canal)],
+    ['Canal reserva', (l, d) => CSV_R(l.canalReserva) || CSV_R(d && d.canalReserva)],
+    ['Gancho de personalização', (l) => CSV_R(l.gancho)],
+    ['Fonte', (l, d) => CSV_R(l.fonte) || CSV_R(d && d.fonte)],
+    ['Etapa (CRM)', (l) => statusOf(l)],
+  ];
+  function leadsToCSV(rows, decOf) {
+    const lines = [CSV_COLS.map((c) => csvCell(c[0])).join(',')];
+    rows.forEach((l) => { const d = decOf(l); lines.push(CSV_COLS.map((c) => csvCell(c[1](l, d))).join(',')); });
+    return '﻿' + lines.join('\r\n') + '\r\n';   // BOM p/ acentos abrirem certo no Excel/Sheets
+  }
+  function downloadCSV(csv, tag, n) {
     try {
       const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
       const url = URL.createObjectURL(blob);
-      const a = el('a'); a.href = url; a.download = 'fova-leads-' + fileDate() + '.csv';
+      const a = el('a'); a.href = url; a.download = 'fova-' + tag + '-' + fileDate() + '.csv';
       document.body.appendChild(a); a.click();
       setTimeout(() => { try { document.body.removeChild(a); URL.revokeObjectURL(url); } catch (e) {} }, 800);
-      toast(rows.length + ' leads exportados — veja em Downloads.', 'ok');
+      toast(n + (n === 1 ? ' lead exportado' : ' leads exportados') + ' — veja em Downloads.', 'ok');
     } catch (e) { toast('Não consegui gerar o arquivo neste navegador.', 'bad'); }
+  }
+  function exportCSV() {
+    if (!DATA || !DATA.leads.length) { toast('Não há leads para exportar.', 'bad'); return; }
+    const rows = DATA.leads.slice().sort((a, b) => a.empresa.localeCompare(b.empresa, 'pt-BR'));
+    downloadCSV(leadsToCSV(rows, decisorFor), 'leads', rows.length);
+  }
+  function exportArchivedCSV() {
+    const rows = Object.values(archived).map((a) => a.lead);
+    if (!rows.length) { toast('Não há leads arquivados.', 'bad'); return; }
+    rows.sort((a, b) => a.empresa.localeCompare(b.empresa, 'pt-BR'));
+    downloadCSV(leadsToCSV(rows, (l) => { const a = archived[normKey(l.empresa)]; return a ? a.dec : null; }), 'arquivados', rows.length);
+  }
+  function exportLeadsList(emps) {
+    const set = new Set(emps);
+    const rows = DATA.leads.filter((l) => set.has(l.empresa)).sort((a, b) => a.empresa.localeCompare(b.empresa, 'pt-BR'));
+    if (!rows.length) { toast('Selecione ao menos um lead.', 'bad'); return; }
+    downloadCSV(leadsToCSV(rows, decisorFor), 'selecionados', rows.length);
   }
   function toast(msg, kind) {
     let t = $('#toast');

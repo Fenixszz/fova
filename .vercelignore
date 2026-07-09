@@ -16,6 +16,9 @@ FOVA - CRM de Leads
 
 painel-ajfqcxvp4y/index.src.html
 
+# Ferramenta de build (gera o index.html) — não precisa ir pro deploy
+painel-ajfqcxvp4y/build-panel.mjs
+
 # CRM preview (dados fake — nunca publicar)
 painel-ajfqcxvp4y/_preview.html
 painel-ajfqcxvp4y/_sample-data.js
