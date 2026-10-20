@@ -38,8 +38,12 @@
     crown: '<path d="M4 18h16M5 18l-1.5-9 4.5 3.5L12 5l4 7.5L20.5 9 19 18"/>',
     building: '<path d="M5 21V5a1 1 0 0 1 1-1h8a1 1 0 0 1 1 1v16M15 9h3a1 1 0 0 1 1 1v11M3 21h18M8 8h2M8 12h2M8 16h2"/>',
     source: '<path d="M10 13a4 4 0 0 0 5.7 0l2.5-2.5a4 4 0 0 0-5.7-5.7L11 6"/><path d="M14 11a4 4 0 0 0-5.7 0L5.8 13.5a4 4 0 0 0 5.7 5.7L13 18"/>',
+    plus: '<path d="M12 5v14M5 12h14"/>',
+    edit: '<path d="M4 20h3.6L18 9.6 14.4 6 4 16.4z"/><path d="M13 7l4 4"/>',
+    close: '<path d="M6 6l12 12M18 6 6 18"/>',
   };
   function icon(name, w) { return '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"' + (w ? ' width="' + w + '" height="' + w + '"' : '') + '>' + (P[name] || '') + '</svg>'; }
+  const DOTS_SVG = '<svg viewBox="0 0 24 24" fill="currentColor" width="16" height="16"><circle cx="5" cy="12" r="1.9"/><circle cx="12" cy="12" r="1.9"/><circle cx="19" cy="12" r="1.9"/></svg>';
 
   /* ---------- helpers ---------- */
   const $ = (s, r) => (r || document).querySelector(s);
@@ -61,6 +65,7 @@
   function liIsPersonal(s) { return /linkedin\.com\/in\//i.test(String(s || '')); }   // /in/ = perfil da pessoa; /company/ = página da empresa
   function liIsCompany(s) { return /linkedin\.com\/(company|school|showcase)\//i.test(String(s || '')); }
   function siteLink(s) { if (!isReal(s) || !/\./.test(s)) return null; return /^https?:/.test(s) ? s : 'https://' + s; }
+  function prettyDomain(s) { try { const u = String(s || '').replace(/^https?:\/\//i, '').replace(/^www\./i, '').split(/[/?#]/)[0]; return u || String(s || ''); } catch (e) { return String(s || ''); } }
   function extractPhone(s) { const m = String(s || '').match(/\(?\d{2}\)?\s?\d{4,5}-?\d{4}/); return m ? m[0] : (digits(s).length >= 10 ? digits(s) : ''); }
   // busca por texto (empresa/dono/@/LinkedIn/e-mail) OU por telefone (só dígitos, tolerante a (), -, espaço)
   function matchQuery(q, textParts, phoneParts) {
@@ -81,17 +86,20 @@
   const LS_TOUCH = 'fova_crm_touch_v1';
   const LS_DELETED = 'fova_crm_deleted_v1';
   const LS_ARCHIVED = 'fova_crm_archived_v1';
+  const LS_RENAMED = 'fova_crm_renamed_v1';            // nomes antigos (da base) escondidos por renomeação — não contam como "apagados"
   const FOLLOWUP_DAYS = 3;                              // depois de abordar, cobra em 3 dias
   const FOLLOWUP_MS = FOLLOWUP_DAYS * 86400000;
-  let overrides = {}, touch = {}, deleted = {}, archived = {};
+  let overrides = {}, touch = {}, deleted = {}, archived = {}, renamed = {};
   try { overrides = JSON.parse(localStorage.getItem(LS_KEY) || '{}'); } catch (e) { overrides = {}; }
   try { touch = JSON.parse(localStorage.getItem(LS_TOUCH) || '{}'); } catch (e) { touch = {}; }
   try { deleted = JSON.parse(localStorage.getItem(LS_DELETED) || '{}'); } catch (e) { deleted = {}; }
   try { archived = JSON.parse(localStorage.getItem(LS_ARCHIVED) || '{}'); } catch (e) { archived = {}; }
+  try { renamed = JSON.parse(localStorage.getItem(LS_RENAMED) || '{}'); } catch (e) { renamed = {}; }
   function saveOverrides() { try { localStorage.setItem(LS_KEY, JSON.stringify(overrides)); } catch (e) {} }
   function saveTouch() { try { localStorage.setItem(LS_TOUCH, JSON.stringify(touch)); } catch (e) {} }
   function saveDeleted() { try { localStorage.setItem(LS_DELETED, JSON.stringify(deleted)); } catch (e) {} }
   function saveArchived() { try { localStorage.setItem(LS_ARCHIVED, JSON.stringify(archived)); } catch (e) {} }
+  function saveRenamed() { try { localStorage.setItem(LS_RENAMED, JSON.stringify(renamed)); } catch (e) {} }
   const STATUSES = ['A contatar', 'Contatado', 'Em conversa', 'Reunião marcada', 'Ganho', 'Perdido', 'Não contatar'];
   function statusOf(lead) { return overrides[lead.empresa] || lead.etapa || 'A contatar'; }
   function waitingDays(lead) { const t = touch[lead.empresa]; if (!t) return null; return Math.floor((Date.now() - t) / 86400000); }
@@ -170,7 +178,7 @@
     const imp = loadImports() || {};
     let leads = (imp.leads && imp.leads.length) ? upsertBy(BASELINE.leads, imp.leads, 'empresa') : BASELINE.leads.slice();
     let decs = (imp.decisores && imp.decisores.length) ? upsertBy(BASELINE.decisores, imp.decisores, 'empresa') : BASELINE.decisores.slice();
-    const hidden = (k) => deleted[k] || archived[k];   // apagados E arquivados somem da lista e do quadro
+    const hidden = (k) => deleted[k] || archived[k] || renamed[k];   // apagados, arquivados E renomeados somem da lista e do quadro
     leads = leads.filter((l) => !hidden(normKey(l.empresa)));
     decs = decs.filter((d) => !hidden(normKey(d.empresa)));
     DATA = { leads: leads, decisores: decs, config: BASELINE.config, comoUsar: BASELINE.comoUsar, painel: BASELINE.painel };
@@ -618,25 +626,39 @@
   function renderLeads() {
     const segs = [...new Set(DATA.leads.map((l) => segCat(l.segmento)))].sort();
     const tb = $('#leadsToolbar');
-    const arch = archivedCount();
+    const arch = archivedCount(), del = deletedCount(), hasImp = !!loadImports();
+    const mItem = (act, ico, label, badge, danger) =>
+      '<button class="menu__item' + (danger ? ' menu__item--danger' : '') + '" type="button" role="menuitem" data-act="' + act + '">' +
+        icon(ico) + '<span>' + esc(label) + '</span>' + (badge ? '<span class="menu__badge tnum">' + badge + '</span>' : '') + '</button>';
     tb.innerHTML =
-      '<div class="search">' + icon('search') + '<input id="leadSearch" type="search" placeholder="Empresa, dono, telefone, @ ou LinkedIn…" aria-label="Buscar leads" /></div>' +
-      '<button class="chip" id="chipAcao" type="button" aria-pressed="false">' + icon('bolt') + 'Só ação de hoje</button>' +
-      '<select class="select" id="fOrd" aria-label="Ordenar por">' +
-        '<option value="prioridade">Ordenar: prioridade</option>' +
-        '<option value="acao">Ordenar: ação de hoje</option>' +
-        '<option value="empresa">Ordenar: A→Z</option>' +
-      '</select>' +
-      sel('fSeg', 'Segmento', [['', 'Todos os segmentos']].concat(segs.map((s) => [s, s]))) +
-      '<span class="tb-spacer"></span>' +
-      '<button class="chip' + (selectMode ? ' is-on' : '') + '" id="chipSelect" type="button" aria-pressed="' + selectMode + '" title="Selecionar vários leads de uma vez">' + icon('check') + (selectMode ? 'Sair da seleção' : 'Selecionar') + '</button>' +
-      '<button class="btn-import" id="btnImport" type="button" title="Suba a planilha (CSV) com novos contatos">' + icon('upload') + 'Importar planilha</button>' +
-      '<button class="btn-export" id="btnExport" type="button" title="Baixar seus leads em CSV">' + icon('download') + 'Exportar planilha</button>' +
-      '<button class="btn-ghost" id="btnArchiveAll" type="button" title="Tira todos os leads da lista e guarda no arquivo (dá pra exportar depois)">' + icon('archive', 15) + 'Arquivar todos</button>' +
-      (arch ? '<button class="btn-ghost" id="btnExportArch" type="button" title="Baixar em CSV os leads arquivados">' + icon('archive', 15) + arch + ' arquivado' + (arch === 1 ? '' : 's') + ' · exportar</button>' : '') +
-      (arch ? '<button class="btn-ghost" id="btnRestoreArch" type="button" title="Trazer os arquivados de volta pra lista">restaurar</button>' : '') +
-      (loadImports() ? '<button class="btn-ghost" id="btnRestore" type="button" title="Voltar aos dados originais">Restaurar original</button>' : '') +
-      (deletedCount() ? '<button class="btn-ghost" id="btnRestoreDel" type="button" title="Trazer de volta os contatos apagados">' + icon('trash', 15) + deletedCount() + ' apagado' + (deletedCount() === 1 ? '' : 's') + ' · restaurar</button>' : '') +
+      '<div class="toolbar__filters">' +
+        '<div class="search">' + icon('search') + '<input id="leadSearch" type="search" placeholder="Buscar empresa, dono, telefone, @…" aria-label="Buscar leads" /></div>' +
+        sel('fSeg', 'Segmento', [['', 'Todos os segmentos']].concat(segs.map((s) => [s, s]))) +
+        '<select class="select" id="fOrd" aria-label="Ordenar por">' +
+          '<option value="prioridade">Ordenar: prioridade</option>' +
+          '<option value="acao">Ordenar: ação de hoje</option>' +
+          '<option value="empresa">Ordenar: A→Z</option>' +
+        '</select>' +
+        '<button class="chip" id="chipAcao" type="button" aria-pressed="false" title="Mostrar só quem precisa de contato ou follow-up hoje">' + icon('bolt') + 'Fila de hoje</button>' +
+      '</div>' +
+      '<div class="toolbar__actions">' +
+        '<button class="chip' + (selectMode ? ' is-on' : '') + '" id="chipSelect" type="button" aria-pressed="' + selectMode + '" title="Selecionar vários leads de uma vez">' + icon('check') + (selectMode ? 'Sair da seleção' : 'Selecionar') + '</button>' +
+        '<span class="toolbar__sep"></span>' +
+        '<button class="btn-import" id="btnAddLead" type="button" title="Cadastrar uma empresa na mão">' + icon('plus') + 'Adicionar empresa</button>' +
+        '<div class="menu-wrap">' +
+          '<button class="btn-export menu-btn" id="btnMore" type="button" aria-haspopup="true" aria-expanded="false" title="Importar, exportar e arquivar">' + DOTS_SVG + 'Mais ações</button>' +
+          '<div class="menu" id="leadsMenu" role="menu" aria-label="Mais ações" hidden>' +
+            mItem('import', 'upload', 'Importar planilha') +
+            mItem('export', 'download', 'Exportar planilha') +
+            '<div class="menu__sep"></div>' +
+            mItem('archiveAll', 'archive', 'Arquivar todos') +
+            (arch ? mItem('exportArch', 'archive', 'Exportar arquivados', arch) : '') +
+            (arch ? mItem('restoreArch', 'download', 'Restaurar arquivados') : '') +
+            (hasImp ? mItem('restoreOrig', 'source', 'Restaurar dados originais') : '') +
+            (del ? '<div class="menu__sep"></div>' + mItem('restoreDel', 'trash', 'Restaurar apagados', del, true) : '') +
+          '</div>' +
+        '</div>' +
+      '</div>' +
       '<input type="file" id="csvInput" accept=".csv,text/csv,text/plain" hidden />';
 
     $('#leadSearch').addEventListener('input', (e) => { leadFilters.q = e.target.value.toLowerCase(); paintLeads(); });
@@ -644,14 +666,12 @@
     $('#fSeg').addEventListener('change', (e) => { leadFilters.seg = e.target.value; paintLeads(); });
     $('#fOrd').addEventListener('change', (e) => { leadSort = e.target.value; paintLeads(); });
     $('#chipSelect').addEventListener('click', toggleSelectMode);
-    $('#btnImport').addEventListener('click', () => $('#csvInput').click());
-    $('#btnExport').addEventListener('click', exportCSV);
-    $('#btnArchiveAll').addEventListener('click', archiveAll);
+    $('#btnAddLead').addEventListener('click', () => openLeadForm(null));
     $('#csvInput').addEventListener('change', handleCSVFile);
-    const bea = $('#btnExportArch'); if (bea) bea.addEventListener('click', exportArchivedCSV);
-    const bra = $('#btnRestoreArch'); if (bra) bra.addEventListener('click', restoreArchived);
-    const br = $('#btnRestore'); if (br) br.addEventListener('click', restoreOriginal);
-    const brd = $('#btnRestoreDel'); if (brd) brd.addEventListener('click', restoreDeleted);
+    wireMenu('#btnMore', '#leadsMenu', {
+      import: () => $('#csvInput').click(), export: exportCSV, archiveAll: archiveAll,
+      exportArch: exportArchivedCSV, restoreArch: restoreArchived, restoreOrig: restoreOriginal, restoreDel: restoreDeleted,
+    });
 
     ensureSelectBar();
     syncToolbar();
@@ -731,6 +751,26 @@
   }
   function sel(id, label, opts) {
     return '<select class="select" id="' + id + '" aria-label="' + esc(label) + '">' + opts.map((o) => '<option value="' + esc(o[0]) + '">' + esc(o[1]) + '</option>').join('') + '</select>';
+  }
+  // menu suspenso: abre no clique, fecha ao escolher item, clicar fora ou apertar Esc
+  function wireMenu(btnSel, menuSel, acts) {
+    const btn = $(btnSel), menu = $(menuSel);
+    if (!btn || !menu) return;
+    let onDoc = null, onKey = null;
+    function close() {
+      menu.hidden = true; btn.classList.remove('is-open'); btn.setAttribute('aria-expanded', 'false');
+      if (onDoc) document.removeEventListener('click', onDoc, true);
+      if (onKey) document.removeEventListener('keydown', onKey, true);
+      onDoc = onKey = null;
+    }
+    function open() {
+      menu.hidden = false; btn.classList.add('is-open'); btn.setAttribute('aria-expanded', 'true');
+      onDoc = (e) => { if (!menu.contains(e.target) && !btn.contains(e.target)) close(); };
+      onKey = (e) => { if (e.key === 'Escape') { close(); btn.focus(); } };
+      setTimeout(() => { document.addEventListener('click', onDoc, true); document.addEventListener('keydown', onKey, true); const fi = menu.querySelector('.menu__item'); if (fi) fi.focus(); }, 0);
+    }
+    btn.addEventListener('click', (e) => { e.stopPropagation(); if (menu.hidden) open(); else close(); });
+    menu.querySelectorAll('[data-act]').forEach((it) => it.addEventListener('click', () => { close(); const fn = acts[it.dataset.act]; if (fn) fn(); }));
   }
   function syncToolbar() {
     const c = $('#chipAcao'); if (c) { c.classList.toggle('is-on', leadFilters.acao); c.setAttribute('aria-pressed', String(leadFilters.acao)); }
@@ -838,12 +878,14 @@
         '<div class="detail__facts">' +
           (st === 'Contatado' && tch ? fact('calendar', (isOverdue(l) ? 'Follow-up venceu em ' + fmtDate(tch + FOLLOWUP_MS) + ' — cobre hoje' : 'Abordado em ' + fmtDate(tch) + ' · follow-up em ' + fmtDate(tch + FOLLOWUP_MS))) : '') +
           fact('pin', l.cidade || '—') +
+          (siteLink(l.site) ? '<div class="fact">' + icon('globe') + '<a href="' + esc(siteLink(l.site)) + '" target="_blank" rel="noopener">' + esc(prettyDomain(l.site)) + '</a></div>' : '') +
           (reserva ? fact('chat', 'Canal reserva: ' + reserva) : '') +
           (isReal(l.fonte) ? fact('source', 'Visto em: ' + l.fonte) : '') +
         '</div>' +
       '</div>' +
       '<div class="ld-foot">' +
         '<div class="ld-foot-left">' +
+          '<a class="ld-link" href="#" data-edit="1">' + icon('edit') + 'Editar empresa e dono</a>' +
           '<a class="ld-link" href="#" data-dossie="1">' + icon('decisores') + 'Ver dossiê completo do dono</a>' +
           '<button class="ld-del" type="button" data-del="1" title="Remover este contato da sua lista">' + icon('trash') + 'Apagar contato</button>' +
         '</div>' +
@@ -854,6 +896,8 @@
       if (sl) sl.addEventListener('change', (e) => { e.stopPropagation(); setStatus(l.empresa, e.target.value); });
       const dl = box.querySelector('[data-dossie]');
       if (dl) dl.addEventListener('click', (e) => { e.preventDefault(); e.stopPropagation(); openDossie(l.empresa); });
+      const ed = box.querySelector('[data-edit]');
+      if (ed) ed.addEventListener('click', (e) => { e.preventDefault(); e.stopPropagation(); openLeadForm(l.empresa); });
       const del = box.querySelector('[data-del]');
       if (del) del.addEventListener('click', (e) => { e.preventDefault(); e.stopPropagation(); deleteLead(l.empresa); });
       box.querySelectorAll('a, button, select').forEach((n) => n.addEventListener('click', (e) => e.stopPropagation()));
@@ -1016,6 +1060,7 @@
   function restoreOriginal() {
     if (!window.confirm('Isto remove tudo que você importou e volta aos dados originais. Continuar?')) return;
     try { localStorage.removeItem(LS_IMPORT); } catch (e) {}
+    renamed = {}; saveRenamed();   // volta os nomes antigos que tinham sido renomeados
     rebuildData(); renderLeads(); renderDecisores(); renderHoje(); renderQuadro();
     toast('Pronto — voltei aos dados originais.', 'ok');
   }
@@ -1102,10 +1147,16 @@
   const decFilters = { q: '', acesso: '' };
   function renderDecisores() {
     $('#decToolbar').innerHTML =
-      '<div class="search">' + icon('search') + '<input id="decSearch" type="search" placeholder="Dono, empresa, telefone ou LinkedIn…" aria-label="Buscar decisores" /></div>' +
-      sel('dAcesso', 'Acesso ao dono', [['', 'Todos os donos'], ['direto', 'Com contato direto'], ['id', 'Identificado (confira)'], ['nao', 'A confirmar']]);
+      '<div class="toolbar__filters">' +
+        '<div class="search">' + icon('search') + '<input id="decSearch" type="search" placeholder="Buscar dono, empresa, telefone ou LinkedIn…" aria-label="Buscar decisores" /></div>' +
+        sel('dAcesso', 'Acesso ao dono', [['', 'Todos os donos'], ['direto', 'Com contato direto'], ['id', 'Identificado (confira)'], ['nao', 'A confirmar']]) +
+      '</div>' +
+      '<div class="toolbar__actions">' +
+        '<button class="btn-import" id="btnAddDec" type="button" title="Cadastrar um decisor na mão">' + icon('plus') + 'Adicionar decisor</button>' +
+      '</div>';
     $('#decSearch').addEventListener('input', (e) => { decFilters.q = e.target.value.toLowerCase(); paintDec(); });
     $('#dAcesso').addEventListener('change', (e) => { decFilters.acesso = e.target.value; paintDec(); });
+    $('#btnAddDec').addEventListener('click', () => openDecForm(null));
     if ($('#decSearch')) $('#decSearch').value = decFilters.q;
     if ($('#dAcesso')) $('#dAcesso').value = decFilters.acesso;
     paintDec();
@@ -1138,6 +1189,7 @@
         '<div class="dec__top">' +
           '<div><div class="dec__emp">' + esc(d.empresa) + (segm ? ' · ' + esc(segm) : '') + '</div>' +
           '<div class="dec__name' + (s.name ? '' : ' muted') + '">' + esc(s.name || 'Dono a confirmar') + '</div></div>' +
+          '<button class="dec__edit" type="button" data-edit="' + esc(d.empresa) + '" aria-label="Editar decisor" title="Editar decisor">' + icon('edit') + '</button>' +
         '</div>' +
         (d.cargo ? '<div class="dec__role">' + esc(d.cargo) + '</div>' : '') +
         '<div class="dec__guide ld-guide ' + s.cls + '"><span class="dot"></span>' + esc(s.txt) + '</div>' +
@@ -1145,6 +1197,254 @@
         (isReal(d.fonte) ? '<div class="dec__why">Visto em: ' + esc(d.fonte) + '</div>' : '') +
       '</article>';
     }).join('');
+    grid.querySelectorAll('[data-edit]').forEach((b) => b.addEventListener('click', () => openDecForm(b.dataset.edit)));
+  }
+
+  /* ============================================================
+     EDITAR / ADICIONAR  (empresa + dono) — salvo como "import"
+     no localStorage, que já se mescla com a base por "empresa".
+     Guardar o objeto completo deixa limpar um campo funcionar
+     (string vazia sobrescreve o valor que vinha da base).
+     ============================================================ */
+  function removeImport(kind, empresa) {
+    const imp = loadImports() || {};
+    if (!imp[kind]) return;
+    imp[kind] = imp[kind].filter((x) => normKey(x.empresa) !== normKey(empresa));
+    saveImports(imp);
+  }
+  function putImport(kind, obj) {
+    const imp = loadImports() || {};
+    const key = normKey(obj.empresa);
+    const arr = (imp[kind] || []).filter((x) => normKey(x.empresa) !== key);
+    arr.push(obj);
+    imp[kind] = arr;
+    saveImports(imp);
+  }
+  function existsEmpresa(empresa, exceptKey) {
+    const k = normKey(empresa);
+    if (exceptKey && k === normKey(exceptKey)) return false;
+    return DATA.leads.some((l) => normKey(l.empresa) === k) || DATA.decisores.some((d) => normKey(d.empresa) === k);
+  }
+
+  // specs dos campos (name = chave no objeto; ns = empresa|dono)
+  const F_EMPRESA = [
+    { name: 'empresa', ns: 'lead', label: 'Nome da empresa', full: true, required: true, placeholder: 'ex.: Clínica Sorriso' },
+    { name: 'segmento', ns: 'lead', label: 'Segmento', placeholder: 'ex.: Odontologia' },
+    { name: 'cidade', ns: 'lead', label: 'Cidade / bairro', placeholder: 'ex.: Curitiba / Batel' },
+    { name: 'site', ns: 'lead', label: 'Site', full: true, placeholder: 'ex.: clinicasorriso.com.br', hint: 'Aparece no detalhe da empresa.' },
+    { name: 'instagram', ns: 'lead', label: 'Instagram da empresa', placeholder: '@ ou link' },
+    { name: 'whatsapp', ns: 'lead', label: 'WhatsApp / telefone da empresa', placeholder: '(41) 99999-9999' },
+    { name: 'email', ns: 'lead', label: 'E-mail da empresa', placeholder: 'contato@empresa.com' },
+    { name: 'linkedinEmpresa', ns: 'lead', label: 'LinkedIn da empresa', placeholder: 'link /company/…' },
+    { name: 'canal', ns: 'lead', label: 'Canal principal', type: 'select', options: ['', 'WhatsApp', 'Instagram DM', 'LinkedIn', 'E-mail', 'Ligação'] },
+    { name: 'canalReserva', ns: 'lead', label: 'Canal reserva', placeholder: 'ex.: Instagram' },
+    { name: 'gancho', ns: 'lead', label: 'Gancho — o que dizer na abordagem', type: 'textarea', full: true, placeholder: 'ex.: Vi que vocês abriram uma unidade nova…' },
+    { name: 'fonte', ns: 'lead', label: 'Fonte (onde você viu)', full: true, placeholder: 'ex.: Google Maps' },
+  ];
+  const F_EMPRESA_LINK = { name: 'empresa', ns: 'lead', label: 'Empresa a que este dono pertence', full: true, required: true, placeholder: 'ex.: Clínica Sorriso' };
+  const F_DONO = [
+    { name: 'decisor', ns: 'dono', label: 'Nome do dono / decisor', full: true, placeholder: 'ex.: Maria Silva' },
+    { name: 'cargo', ns: 'dono', label: 'Cargo', placeholder: 'ex.: Sócia-fundadora' },
+    { name: 'telWhatsapp', ns: 'dono', label: 'WhatsApp / telefone pessoal', placeholder: '(41) 99999-9999' },
+    { name: 'instagram', ns: 'dono', label: 'Instagram pessoal', placeholder: '@ ou link' },
+    { name: 'linkedin', ns: 'dono', label: 'LinkedIn pessoal', placeholder: 'link /in/…' },
+    { name: 'emailPessoal', ns: 'dono', label: 'E-mail pessoal', placeholder: 'nome@email.com' },
+  ];
+
+  let _modal = null, _formCtx = null, _lastFocus = null;
+  function ensureModal() {
+    if (_modal) return _modal;
+    const m = el('div', 'modal'); m.id = 'editModal'; m.hidden = true;
+    m.innerHTML =
+      '<div class="modal__backdrop" data-close="1"></div>' +
+      '<div class="modal__card" role="dialog" aria-modal="true" aria-labelledby="modalTitle">' +
+        '<header class="modal__head">' +
+          '<div><div class="modal__eyebrow" id="modalEyebrow"></div><h2 class="modal__title serif" id="modalTitle"></h2></div>' +
+          '<button class="modal__x" type="button" data-close="1" aria-label="Fechar">' + icon('close') + '</button>' +
+        '</header>' +
+        '<form class="modal__form" id="editForm" autocomplete="off">' +
+          '<div class="modal__body" id="modalBody"></div>' +
+          '<footer class="modal__foot">' +
+            '<button class="mbtn mbtn--ghost" type="button" data-close="1">Cancelar</button>' +
+            '<button class="mbtn mbtn--primary" type="submit" id="modalSave">Salvar</button>' +
+          '</footer>' +
+        '</form>' +
+      '</div>';
+    document.body.appendChild(m);
+    m.querySelectorAll('[data-close]').forEach((b) => b.addEventListener('click', closeModal));
+    m.querySelector('#editForm').addEventListener('submit', onFormSubmit);
+    m.addEventListener('keydown', trapKey);
+    _modal = m;
+    return m;
+  }
+  function fieldHTML(spec, val) {
+    const id = 'ff_' + spec.ns + '_' + spec.name;
+    const common = 'id="' + id + '" data-ns="' + spec.ns + '" data-field="' + spec.name + '"' + (spec.ph === false ? '' : ' placeholder="' + esc(spec.placeholder || '') + '"');
+    let control;
+    if (spec.type === 'textarea') {
+      control = '<textarea ' + common + ' rows="3">' + esc(val || '') + '</textarea>';
+    } else if (spec.type === 'select') {
+      const v = val || '';
+      control = '<select ' + common + '>' + spec.options.map((o) => '<option value="' + esc(o) + '"' + (o === v ? ' selected' : '') + '>' + esc(o || '— nenhum —') + '</option>').join('') + '</select>';
+    } else {
+      control = '<input type="text" ' + common + ' value="' + esc(val || '') + '"' + (spec.locked ? ' readonly' : '') + ' />';
+    }
+    return '<div class="field' + (spec.full ? ' field--full' : '') + '">' +
+      '<label for="' + id + '">' + esc(spec.label) + (spec.required ? ' *' : '') + '</label>' +
+      control +
+      (spec.hint ? '<span class="field__hint">' + esc(spec.hint) + '</span>' : '') +
+      '<span class="field__err" data-err-for="' + spec.ns + '.' + spec.name + '"></span>' +
+    '</div>';
+  }
+  function group(head, ico, specs, vals) {
+    return '<section class="fgroup"><div class="fgroup__head">' + icon(ico) + esc(head) + '</div>' +
+      '<div class="fgrid">' + specs.map((s) => fieldHTML(s, vals[s.ns === 'dono' ? ('dono:' + s.name) : s.name])).join('') + '</div></section>';
+  }
+
+  function openLeadForm(empresa) {
+    const isEdit = !!empresa;
+    const lead = isEdit ? (DATA.leads.find((l) => l.empresa === empresa) || { empresa: empresa }) : {};
+    const dec = isEdit ? (decisorFor(empresa) || {}) : {};
+    const vals = {};
+    F_EMPRESA.forEach((s) => { vals[s.name] = lead[s.name] != null ? lead[s.name] : ''; });
+    F_DONO.forEach((s) => { vals['dono:' + s.name] = dec[s.name] != null ? dec[s.name] : ''; });
+    _formCtx = { mode: 'empresa', isEdit, original: empresa || '' };
+    const m = ensureModal();
+    $('#modalEyebrow', m).textContent = isEdit ? 'Editar empresa' : 'Nova empresa';
+    $('#modalTitle', m).innerHTML = isEdit ? esc(empresa) : 'Adicionar <em>empresa</em>';
+    $('#modalBody', m).innerHTML =
+      group('Dados da empresa', 'building', F_EMPRESA, vals) +
+      group('Quem decide (dono)', 'crown', F_DONO, vals);
+    showModal();
+  }
+  function openDecForm(empresa) {
+    const isEdit = !!empresa;
+    const lead = isEdit ? (DATA.leads.find((l) => l.empresa === empresa) || { empresa: empresa }) : {};
+    const dec = isEdit ? (decisorFor(empresa) || {}) : {};
+    const vals = { empresa: isEdit ? (dec.empresa || lead.empresa || empresa) : '' };
+    F_DONO.forEach((s) => { vals['dono:' + s.name] = dec[s.name] != null ? dec[s.name] : ''; });
+    _formCtx = { mode: 'decisor', isEdit, original: empresa || '' };
+    const m = ensureModal();
+    const empSpec = Object.assign({}, F_EMPRESA_LINK, { locked: isEdit, hint: isEdit ? 'Para renomear a empresa, edite-a na aba Leads.' : 'Se a empresa ainda não existe, ela é criada junto.' });
+    $('#modalEyebrow', m).textContent = isEdit ? 'Editar decisor' : 'Novo decisor';
+    $('#modalTitle', m).innerHTML = isEdit ? esc(dec.decisor || empresa) : 'Adicionar <em>decisor</em>';
+    $('#modalBody', m).innerHTML =
+      '<section class="fgroup"><div class="fgrid">' + fieldHTML(empSpec, vals.empresa) + '</div></section>' +
+      group('Quem decide (dono)', 'crown', F_DONO, vals);
+    showModal();
+  }
+
+  function showModal() {
+    const m = ensureModal();
+    _lastFocus = document.activeElement;
+    m.hidden = false;
+    try { document.body.style.overflow = 'hidden'; } catch (e) {}
+    clearErrors();
+    setTimeout(() => { const f = m.querySelector('input:not([readonly]), textarea, select'); if (f) f.focus(); }, 30);
+  }
+  function closeModal() {
+    if (!_modal || _modal.hidden) return;
+    _modal.hidden = true; _formCtx = null;
+    try { document.body.style.overflow = ''; } catch (e) {}
+    try { if (_lastFocus && _lastFocus.focus) _lastFocus.focus(); } catch (e) {}
+  }
+  function trapKey(e) {
+    if (e.key === 'Escape') { e.preventDefault(); closeModal(); return; }
+    if (e.key !== 'Tab') return;
+    const nodes = _modal.querySelectorAll('button, input, textarea, select, a[href]');
+    const list = Array.prototype.filter.call(nodes, (x) => !x.disabled && !x.readOnly && x.offsetParent !== null);
+    if (!list.length) return;
+    const first = list[0], last = list[list.length - 1];
+    if (e.shiftKey && document.activeElement === first) { e.preventDefault(); last.focus(); }
+    else if (!e.shiftKey && document.activeElement === last) { e.preventDefault(); first.focus(); }
+  }
+  function readForm() {
+    const out = { lead: {}, dono: {} };
+    _modal.querySelectorAll('[data-field]').forEach((inp) => {
+      out[inp.dataset.ns][inp.dataset.field] = (inp.value || '').trim();
+    });
+    return out;
+  }
+  function clearErrors() {
+    if (!_modal) return;
+    _modal.querySelectorAll('.field__err').forEach((e) => { e.textContent = ''; });
+    _modal.querySelectorAll('[data-field]').forEach((i) => i.removeAttribute('aria-invalid'));
+  }
+  function showError(ns, field, msg) {
+    const e = _modal.querySelector('[data-err-for="' + ns + '.' + field + '"]');
+    const i = _modal.querySelector('[data-ns="' + ns + '"][data-field="' + field + '"]');
+    if (e) e.textContent = msg;
+    if (i) { i.setAttribute('aria-invalid', 'true'); i.focus(); }
+  }
+
+  function onFormSubmit(e) {
+    e.preventDefault();
+    if (!_formCtx) return;
+    clearErrors();
+    const f = readForm();
+    const ctx = _formCtx;
+    const newEmp = (f.lead.empresa || '').trim();
+    if (!newEmp) { showError('lead', 'empresa', 'Dê um nome pra empresa.'); return; }
+
+    const isRename = ctx.isEdit && ctx.original && normKey(ctx.original) !== normKey(newEmp);
+    // bloqueia criar/renomear por cima de outra empresa já existente
+    if (ctx.mode === 'empresa' && (!ctx.isEdit || isRename) && existsEmpresa(newEmp, ctx.isEdit ? ctx.original : null)) {
+      showError('lead', 'empresa', 'Já existe uma empresa com esse nome. Edite a que já está na lista.');
+      return;
+    }
+
+    // renomear: esconde o registro antigo e migra a etapa (status/cronômetro) p/ o novo nome
+    if (isRename) {
+      if (overrides[ctx.original] != null) { overrides[newEmp] = overrides[ctx.original]; delete overrides[ctx.original]; saveOverrides(); }
+      if (touch[ctx.original] != null) { touch[newEmp] = touch[ctx.original]; delete touch[ctx.original]; saveTouch(); }
+      removeImport('leads', ctx.original); removeImport('decisores', ctx.original);
+      if ((BASELINE.leads || []).some((x) => normKey(x.empresa) === normKey(ctx.original)) ||
+          (BASELINE.decisores || []).some((x) => normKey(x.empresa) === normKey(ctx.original))) {
+        renamed[normKey(ctx.original)] = 1; saveRenamed();   // esconde o nome antigo da base, sem contar como "apagado"
+      }
+      openRows.delete(ctx.original); selected.delete(ctx.original);
+    }
+
+    const donoName = (f.dono.decisor || '').trim();
+    // de onde ler o registro atual: ao editar, do nome antigo; ao adicionar, do nome digitado
+    // (assim vincular um decisor a uma empresa que já existe não apaga os dados dela)
+    const lookupKey = ctx.isEdit ? ctx.original : newEmp;
+    // objeto da empresa: parte do que já existe (preserva campos não editáveis, ex.: contato) e aplica o que foi digitado
+    const curLead = DATA.leads.find((l) => normKey(l.empresa) === normKey(lookupKey)) || {};
+    const leadObj = Object.assign({}, curLead);
+    if (ctx.mode === 'empresa') { F_EMPRESA.forEach((s) => { leadObj[s.name] = f.lead[s.name] || ''; }); }
+    leadObj.empresa = newEmp;
+    leadObj.decisor = donoName;
+
+    // objeto do dono
+    const curDec = (decisorFor(lookupKey) || {});
+    const decObj = Object.assign({}, curDec);
+    F_DONO.forEach((s) => { decObj[s.name] = f.dono[s.name] || ''; });
+    decObj.empresa = newEmp;
+
+    const anyOwner = F_DONO.some((s) => isReal(f.dono[s.name]));
+    const hadDec = isReal(curDec.decisor) || F_DONO.some((s) => isReal(curDec[s.name]));
+
+    // se apagaram a empresa inteira: evita salvar vazio
+    putImport('leads', leadObj);
+    if (anyOwner || hadDec) putImport('decisores', decObj);
+    else removeImport('decisores', newEmp);
+
+    // tira dos apagados/renomeados, se o nome novo estava escondido
+    if (deleted[normKey(newEmp)]) { delete deleted[normKey(newEmp)]; saveDeleted(); }
+    if (renamed[normKey(newEmp)]) { delete renamed[normKey(newEmp)]; saveRenamed(); }
+
+    rebuildData();
+    rerenderAll();
+    closeModal();
+
+    if (ctx.mode === 'decisor') {
+      toast(ctx.isEdit ? 'Decisor atualizado.' : 'Decisor adicionado.', 'ok');
+      openDossie(newEmp);
+    } else {
+      toast(ctx.isEdit ? 'Empresa atualizada.' : 'Empresa adicionada.', 'ok');
+      if (!ctx.isEdit) openLead(newEmp);
+    }
   }
 
 })();
