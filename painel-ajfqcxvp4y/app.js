@@ -12,6 +12,7 @@
     quadro: '<rect x="3" y="4" width="5" height="16" rx="1.4"/><rect x="10" y="4" width="5" height="10" rx="1.4"/><rect x="17" y="4" width="4" height="13" rx="1.4"/>',
     leads: '<path d="M4 6h16M4 12h16M4 18h10"/>',
     decisores: '<circle cx="9" cy="8" r="3.2"/><path d="M3.5 20a5.5 5.5 0 0 1 11 0"/><path d="M16 8.2a3 3 0 0 1 0 5.6M18 20a5 5 0 0 0-3-4.6"/>',
+    quadros: '<rect x="3" y="4" width="18" height="16" rx="2.5"/><path d="M9 4v16M15 4v16"/>',
     search: '<circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3"/>',
     bolt: '<path d="M13 2 4 14h7l-1 8 9-12h-7z"/>',
     arrow: '<path d="M5 12h14M13 6l6 6-6 6"/>',
@@ -384,14 +385,16 @@
      ============================================================ */
   const VIEWS = [
     { id: 'hoje', label: 'Hoje', ico: 'hoje' },
-    { id: 'quadro', label: 'Quadro', ico: 'quadro' },
+    { id: 'quadro', label: 'Funil', ico: 'quadro' },
     { id: 'leads', label: 'Leads', ico: 'leads', badge: true },
     { id: 'decisores', label: 'Decisores', ico: 'decisores' },
+    { id: 'quadros', label: 'Quadros', ico: 'quadros', badge: 'quadros' },
   ];
   let booted = false;
   function boot() {
     if (booted) return; booted = true;
     buildNav(); renderHoje(); renderQuadro(); renderLeads(); renderDecisores();
+    try { if (window.Boards && window.Boards.init) window.Boards.init(); } catch (e) {}
     const initial = (location.hash || '').replace('#', '');
     go(VIEWS.some((v) => v.id === initial) ? initial : 'hoje');
   }
@@ -401,7 +404,7 @@
       VIEWS.forEach((v) => {
         const b = el('button', 'nav__item');
         b.type = 'button'; b.dataset.go = v.id;
-        b.innerHTML = icon(v.ico) + '<span class="lbl">' + v.label + '</span>' + (v.badge ? '<span class="nav__badge" data-badge="leads"></span>' : '');
+        b.innerHTML = icon(v.ico) + '<span class="lbl">' + v.label + '</span>' + (v.badge ? '<span class="nav__badge" data-badge="' + (v.badge === true ? 'leads' : v.badge) + '"></span>' : '');
         b.addEventListener('click', () => go(v.id));
         nav.appendChild(b);
       });
@@ -1446,5 +1449,17 @@
       if (!ctx.isEdit) openLead(newEmp);
     }
   }
+
+  /* ============================================================
+     PONTE PARA O MÓDULO DE QUADROS (boards.js)
+     Expõe só o necessário, mantendo a mesma identidade/ajudantes.
+     ============================================================ */
+  window.FOVA = {
+    icon: icon, el: el, esc: esc, qs: $, toast: toast, toastUndo: toastUndo,
+    go: go, getData: function () { return DATA; }, decisorFor: decisorFor,
+    normKey: normKey, isReal: isReal, statusOf: statusOf, setStatus: setStatus,
+    segCat: segCat, bairro: bairro, STATUSES: STATUSES, fmtDate: fmtDate,
+    openLead: openLead, isBooted: function () { return booted; },
+  };
 
 })();

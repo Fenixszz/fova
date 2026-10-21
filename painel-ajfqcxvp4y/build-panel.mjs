@@ -12,16 +12,18 @@ const read = (f) => readFileSync(new URL(f, here), 'utf8');
 let html = read('index.src.html');
 const enc = read('crm-data.enc.js');
 const app = read('app.js');
+const boards = read('boards.js');
 
 const inline = (content) => () => '  <script>\n' + content + '\n</script>';   // função → sem interpretação de $ na substituição
 
 html = html.replace('  <script src="crm-data.enc.js?v=7"></script>', inline(enc));
 html = html.replace('  <script src="app.js?v=7"></script>', inline(app));
+html = html.replace('  <script src="boards.js?v=1"></script>', inline(boards));
 
 writeFileSync(new URL('index.html', here), html);
 console.log('index.html gerado (' + html.length + ' bytes).');
 
-// _preview.html — mesmo HTML/CSS, mas com dados FALSOS (_sample-data.js) e app.js externo.
+// _preview.html — mesmo HTML/CSS, mas com dados FALSOS (_sample-data.js) e app.js/boards.js externos.
 // Serve só pra conferir o visual localmente (gitignore + vercelignore); nunca vai pro deploy.
 const src = read('index.src.html');
 const preview = src.replace('  <script src="crm-data.enc.js?v=7"></script>', '  <script src="_sample-data.js?v=12"></script>');
