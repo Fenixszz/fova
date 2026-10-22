@@ -419,7 +419,9 @@
           '<span class="qb-notif__txt">' + esc(n.text) + '<small>' + fmtAgo(n.ts) + '</small></span>' +
         '</button>').join('')
         : '<div class="qb-notif__empty">' + ic('bell', 26) + '<span>Sem notificações por aqui.</span></div>') +
-      '<div class="qb-notif__foot"><label class="qb-switch"><input type="checkbox" id="qbEmailNotif"' + (S.prefs.emailNotif ? ' checked' : '') + ' disabled><span></span>Avisar por e-mail</label><small>Requer servidor de e-mail (indisponível neste painel local).</small></div>';
+      '<div class="qb-notif__foot"><label class="qb-switch"><input type="checkbox" id="qbEmailNotif"' + (S.prefs.emailNotif ? ' checked' : '') + (mailReady() ? '' : ' disabled') + '><span></span>Avisar por e-mail</label><small>' + (mailReady() ? 'Manda um e-mail pro sócio citado em menções, atribuições, prazos e automações.' : 'Disponível depois de entrar com sua conta (login por sócio).') + '</small></div>';
+    const em = menu.querySelector('#qbEmailNotif');
+    if (em && !em.disabled) em.addEventListener('change', () => { S.prefs.emailNotif = em.checked; save(); toast(em.checked ? 'Avisos por e-mail ligados.' : 'Avisos por e-mail desligados.'); });
     menu.querySelectorAll('[data-notif]').forEach((b) => b.addEventListener('click', () => {
       const n = S.notifications.find((x) => x.id === b.dataset.notif); if (!n) return;
       n.read = true; save();
@@ -429,10 +431,30 @@
     const cr = menu.querySelector('[data-notif-read]'); if (cr) cr.addEventListener('click', (e) => { e.stopPropagation(); S.notifications.forEach((n) => n.read = true); save(); renderNotifMenu(menu); updateNavBadge(); });
   }
   function notify(opts) {
+    opts = opts || {};
+    // `to` = quem a notificação cita (id de membro, ou lista). Não entra no
+    // registro salvo; serve só pra decidir quem recebe o e-mail.
+    var to = opts.to; delete opts.to;
     S.notifications.push(Object.assign({ id: uid('n'), ts: now(), read: false, icon: 'bell' }, opts));
     if (S.notifications.length > 200) S.notifications = S.notifications.slice(-200);
     save(); updateNavBadge();
+    emailNotify(to, opts.text);
   }
+  // Manda e-mail pro(s) sócio(s) citado(s), quando "Avisar por e-mail" está
+  // ligado e o painel está logado (Supabase). Melhor esforço, nunca bloqueia.
+  function emailNotify(to, text) {
+    try {
+      if (!S.prefs.emailNotif || !to || !text) return;
+      if (!(window.FOVASync && window.FOVASync.enabled && window.FOVASync.notifyEmail)) return;
+      var link = location.origin + location.pathname;
+      var ids = Array.isArray(to) ? to : [to];
+      ids.filter(Boolean).forEach(function (id) {
+        window.FOVASync.notifyEmail(id, { text: text, link: link });
+      });
+    } catch (e) {}
+  }
+  // E-mail só é possível logado no Supabase (há sessão/token e perfis com e-mail).
+  function mailReady() { return !!(window.FOVASync && window.FOVASync.enabled && window.FOVASync.notifyEmail); }
 
   /* ============================================================
      TELA DO QUADRO
@@ -1219,7 +1241,7 @@
     matches.forEach((mt) => {
       const name = mt.slice(1).toLowerCase();
       const m = S.members.find((x) => x.name.toLowerCase().replace(/\s/g, '').indexOf(name) === 0 || x.name.toLowerCase().split(/\s/)[0] === name);
-      if (m && m.id !== me().id) notify({ text: me().name + ' mencionou você em “' + c.title + '”', icon: 'chat', boardId: b.id, cardId: c.id });
+      if (m && m.id !== me().id) notify({ text: me().name + ' mencionou você em “' + c.title + '”', icon: 'chat', boardId: b.id, cardId: c.id, to: m.id });
     });
   }
 
@@ -1232,7 +1254,7 @@
     else if (kind === 'members') pop(anchor, membersPopHTML(c), (p) => {
       p.querySelectorAll('[data-togglemember]').forEach((x) => x.addEventListener('click', () => {
         const id = x.dataset.togglemember; const had = c.members.includes(id); toggleArr(c.members, id);
-        if (!had && id !== me().id) { logActivity(c, 'atribuiu ' + (S.members.find((m) => m.id === id) || {}).name); notify({ text: me().name + ' atribuiu “' + c.title + '” a você', icon: 'user', boardId: b.id, cardId: c.id }); }
+        if (!had && id !== me().id) { logActivity(c, 'atribuiu ' + (S.members.find((m) => m.id === id) || {}).name); notify({ text: me().name + ' atribuiu “' + c.title + '” a você', icon: 'user', boardId: b.id, cardId: c.id, to: id }); }
         touchCard(c); save(); p.refresh(membersPopHTML(c)); renderCard();
       }));
     });
@@ -1641,8 +1663,8 @@
   }
   function applyAction(b, card, a) {
     const act = a.action;
-    if (act.type === 'notify') { const m = S.members.find((x) => x.id === act.memberId); notify({ text: 'Automação: “' + card.title + '” — avisar ' + (m ? m.name : 'alguém'), icon: 'bolt', boardId: b.id, cardId: card.id }); }
-    else if (act.type === 'assign') { if (act.memberId && !card.members.includes(act.memberId)) { card.members.push(act.memberId); logActivity(card, 'automação atribuiu responsável'); notify({ text: 'Automação atribuiu “' + card.title + '”', icon: 'user', boardId: b.id, cardId: card.id }); } }
+    if (act.type === 'notify') { const m = S.members.find((x) => x.id === act.memberId); notify({ text: 'Automação: “' + card.title + '” — avisar ' + (m ? m.name : 'alguém'), icon: 'bolt', boardId: b.id, cardId: card.id, to: act.memberId }); }
+    else if (act.type === 'assign') { if (act.memberId && !card.members.includes(act.memberId)) { card.members.push(act.memberId); logActivity(card, 'automação atribuiu responsável'); notify({ text: 'Automação atribuiu “' + card.title + '”', icon: 'user', boardId: b.id, cardId: card.id, to: act.memberId }); } }
     else if (act.type === 'priority') { card.priority = act.priorityId; logActivity(card, 'automação definiu prioridade'); }
     else if (act.type === 'checklist') { let cl = card.checklists.find((x) => x.title === 'Automação'); if (!cl) { cl = { id: uid('cl'), title: 'Automação', items: [] }; card.checklists.push(cl); } cl.items.push({ id: uid('ci'), text: act.text || 'Tarefa', done: false }); logActivity(card, 'automação criou uma tarefa'); }
     else if (act.type === 'crmStatus') { if (card.crm && F.setStatus) { try { F.setStatus(card.crm.empresa, act.status); } catch (e) {} logActivity(card, 'automação atualizou o CRM: ' + act.status); } }
@@ -1702,7 +1724,7 @@
         if (d <= rem && d >= -30) {
           const key = 'due:' + c.id + ':' + toInputDate(c.due);
           if (!S.notifications.some((n) => n.key === key)) {
-            notify({ key: key, text: (d < 0 ? 'Prazo vencido: ' : d === 0 ? 'Vence hoje: ' : 'Prazo chegando: ') + '“' + c.title + '”', icon: 'clock', boardId: b.id, cardId: c.id });
+            notify({ key: key, text: (d < 0 ? 'Prazo vencido: ' : d === 0 ? 'Vence hoje: ' : 'Prazo chegando: ') + '“' + c.title + '”', icon: 'clock', boardId: b.id, cardId: c.id, to: c.members.slice() });
           }
         }
       });

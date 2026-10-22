@@ -1116,6 +1116,29 @@
     liveEdit: function (cardId, boardId) { broadcastLive('edit', cardId, boardId); },
     liveBlur: function (cardId, boardId) { broadcastLive('blur', cardId, boardId); },
     log: logActivity,
+    // Aviso por e-mail: pede pro servidor (função na Vercel) mandar um e-mail
+    // pro sócio citado. Melhor esforço — se falhar, a notificação no sino já
+    // aconteceu de qualquer jeito. Só roda logado (há token de sessão).
+    notifyEmail: function (toMemberId, payload) {
+      try {
+        if (!toMemberId) return Promise.resolve();
+        return sb.auth.getSession().then(function (r) {
+          var token = r && r.data && r.data.session && r.data.session.access_token;
+          if (!token) return;
+          return fetch('/api/notify-email', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + token },
+            body: JSON.stringify({
+              toMemberId: toMemberId,
+              text: (payload && payload.text) || '',
+              link: (payload && payload.link) || '',
+            }),
+          }).then(function (res) {
+            if (!res.ok) log('notifyEmail HTTP ' + res.status);
+          }).catch(function (e) { log('notifyEmail erro', e); });
+        });
+      } catch (e) { log('notifyEmail exceção', e); return Promise.resolve(); }
+    },
   };
 
   /* ============================================================
