@@ -1402,8 +1402,8 @@ window.FOVA_CFG = {
       '.fp-icon{width:32px;height:32px;display:grid;place-items:center;border-radius:50%;background:none;border:none;color:var(--text-2,#A89880);cursor:pointer}',
       '.fp-icon:hover{color:var(--text,#F0EDE6);background:var(--bg-3,#1B1B36)}.fp-icon svg{width:17px;height:17px}',
       // bordas "alguém está mexendo aqui"
-      '.fova-live{position:relative;outline:2px solid var(--lc,#6FA8D0);outline-offset:1px;border-radius:12px;transition:outline-color .2s}',
-      '.fova-live::after{content:attr(data-live-who);position:absolute;top:-10px;left:8px;font-size:10px;font-weight:700;color:#fff;background:var(--lc,#6FA8D0);padding:1px 7px;border-radius:999px;white-space:nowrap;z-index:5}',
+      '.fova-live{position:relative;overflow:visible;outline:2px solid var(--lc,#6FA8D0);outline-offset:2px;border-radius:12px;transition:outline-color .2s}',
+      '.fova-live::after{content:attr(data-live-who);position:absolute;top:-11px;left:10px;font-size:10.5px;font-weight:700;line-height:1.5;color:#1a1a2a;background:var(--lc,#6FA8D0);padding:2px 9px;border-radius:999px;white-space:nowrap;letter-spacing:.01em;box-shadow:0 2px 6px -2px rgba(0,0,0,.6);z-index:8;pointer-events:none}',
       // gaveta de histórico
       '#fovaHist{position:fixed;top:0;right:0;bottom:0;width:min(380px,92vw);z-index:300;background:linear-gradient(180deg,var(--bg-1,#0D0D1A),var(--bg-base,#07070F));border-left:1px solid var(--line,#2A2A48);box-shadow:-20px 0 40px -30px #000;transform:translateX(100%);transition:transform .22s ease;display:flex;flex-direction:column;color:var(--text,#F0EDE6)}',
       '#fovaHist.open{transform:translateX(0)}',
@@ -1851,7 +1851,6 @@ window.FOVA_CFG = {
     booted = true;
     startRealtime();
     mountPresenceBar();
-    logActivity('entrou', null, 'auth');
   }
 
   // Garante que os dois sócios sejam os "membros" dos Quadros e que "eu" seja eu.
@@ -2004,15 +2003,45 @@ window.FOVA_CFG = {
   }
   function diffBoardsForActivity(prev, cur) {
     if (!prev) return;
-    var pc = {}; (prev.boards || []).forEach(function (b) { (b.cards || []).forEach(function (c) { pc[c.id] = { c: c, b: b }; }); });
-    (cur.boards || []).forEach(function (b) {
-      (b.cards || []).forEach(function (c) {
-        var old = pc[c.id];
-        if (!old) { logActivity('criou o cartão', c.title, 'board'); return; }
-        if (old.c.columnId !== c.columnId) logActivity('moveu o cartão', c.title, 'board');
-        else if ((c.updatedAt || 0) > (old.c.updatedAt || 0)) logActivity('editou o cartão', c.title, 'board');
+    function idx(S) {
+      var b = {}, co = {}, ca = {};
+      (S.boards || []).forEach(function (bd) {
+        b[bd.id] = bd;
+        (bd.columns || []).forEach(function (c) { co[c.id] = { c: c, b: bd }; });
+        (bd.cards || []).forEach(function (c) { ca[c.id] = { c: c, b: bd }; });
       });
+      return { b: b, co: co, ca: ca };
+    }
+    var P = idx(prev), C = idx(cur);
+    // quadros
+    Object.keys(C.b).forEach(function (id) {
+      var p = P.b[id], c = C.b[id];
+      if (!p) { logActivity('criou o quadro', c.name, 'board'); return; }
+      if (p.name !== c.name) logActivity('renomeou o quadro para', c.name, 'board');
+      if (!p.archived && c.archived) logActivity('arquivou o quadro', c.name, 'board');
+      else if (p.archived && !c.archived) logActivity('restaurou o quadro', c.name, 'board');
     });
+    Object.keys(P.b).forEach(function (id) { if (!C.b[id]) logActivity('excluiu o quadro', P.b[id].name, 'board'); });
+    // colunas
+    Object.keys(C.co).forEach(function (id) {
+      var p = P.co[id], c = C.co[id];
+      if (!p) { logActivity('criou a coluna', c.c.name, 'board'); return; }
+      if (p.c.name !== c.c.name) logActivity('renomeou a coluna para', c.c.name, 'board');
+      if (!p.c.archived && c.c.archived) logActivity('arquivou a coluna', c.c.name, 'board');
+    });
+    Object.keys(P.co).forEach(function (id) { if (!C.co[id]) logActivity('excluiu a coluna', P.co[id].c.name, 'board'); });
+    // cartões
+    Object.keys(C.ca).forEach(function (id) {
+      var p = P.ca[id], c = C.ca[id];
+      if (!p) { logActivity('criou o cartão', c.c.title, 'board'); return; }
+      if (!p.c.archived && c.c.archived) { logActivity('arquivou o cartão', c.c.title, 'board'); return; }
+      if (p.c.archived && !c.c.archived) { logActivity('restaurou o cartão', c.c.title, 'board'); return; }
+      if (p.c.columnId !== c.c.columnId) {
+        var col = (c.b.columns || []).find(function (x) { return x.id === c.c.columnId; });
+        logActivity('moveu o cartão', c.c.title + (col ? ' → ' + col.name : ''), 'board');
+      } else if ((c.c.updatedAt || 0) > (p.c.updatedAt || 0)) logActivity('editou o cartão', c.c.title, 'board');
+    });
+    Object.keys(P.ca).forEach(function (id) { if (!C.ca[id]) logActivity('excluiu o cartão', P.ca[id].c.title, 'board'); });
   }
 
   // Mescla dois estados de Quadros preservando edições de cartões diferentes.
@@ -2073,7 +2102,7 @@ window.FOVA_CFG = {
       if (row.key === 'boards_dead') applyRemoteDead(row.data);
       if (row.key === 'import') { applying = true; writeLS(LS.imports, mergeImports(readLS(LS.imports), row.data)); applying = false; safeReloadCRM(); }
     });
-    channel.on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'activity' }, function (p) { renderHistItem(p.new, true); });
+    channel.on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'activity' }, function (p) { if (p.new && p.new.escopo !== 'auth') renderHistItem(p.new, true); });
     channel.on('postgres_changes', { event: '*', schema: 'public', table: 'profiles' }, function () { loadMembers().then(renderPresence); });
 
     channel.on('broadcast', { event: 'live' }, function (m) { handleLive(m.payload); });
@@ -2250,7 +2279,6 @@ window.FOVA_CFG = {
     });
   }
   function doSignOut(scope) {
-    logActivity('saiu', null, 'auth');
     sb.auth.signOut(scope === 'global' ? { scope: 'global' } : {}).then(function () { location.reload(); });
   }
 
@@ -2273,7 +2301,7 @@ window.FOVA_CFG = {
     }
     document.getElementById('fovaHist').classList.add('open');
     document.getElementById('fovaHistBack').classList.add('open');
-    sb.from('activity').select('*').order('ts', { ascending: false }).limit(80).then(function (r) {
+    sb.from('activity').select('*').neq('escopo', 'auth').order('ts', { ascending: false }).limit(120).then(function (r) {
       histItems = r.data || [];
       var list = document.getElementById('fhList');
       list.innerHTML = histItems.length ? '' : '<div class="fh-empty">Nada por aqui ainda.</div>';
