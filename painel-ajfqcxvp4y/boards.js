@@ -385,28 +385,14 @@
      TROCA DE PERFIL (demonstra permissões) + sino de notificações
      ------------------------------------------------------------ */
   function userSwitcherHTML() {
+    // Identidade vem do login (um por sócio). Sem troca de perfil nem equipe.
     const m = me();
-    return '<div class="qb-user menu-wrap">' +
-      '<button class="qb-user__btn" id="qbUserBtn" type="button" aria-haspopup="true" aria-expanded="false" title="Trocar de perfil">' +
-        '<span class="qb-avatar" style="background:' + m.color + '">' + initials(m.name) + '</span>' +
-        '<span class="qb-user__info"><b>' + esc(m.name) + '</b><small>' + roleName(m.role) + '</small></span>' + ic('chevD', 15) +
-      '</button>' +
-      '<div class="menu" id="qbUserMenu" role="menu" hidden>' +
-        S.members.map((x) => '<button class="menu__item" type="button" data-user="' + x.id + '"><span class="qb-avatar qb-avatar--sm" style="background:' + x.color + '">' + initials(x.name) + '</span><span>' + esc(x.name) + '</span><span class="menu__badge">' + roleName(x.role) + '</span></button>').join('') +
-        (canAdmin() ? '<div class="menu__sep"></div><button class="menu__item" type="button" data-user-manage="1">' + ic('users') + '<span>Gerenciar equipe</span></button>' : '') +
-      '</div>' +
+    return '<div class="qb-user">' +
+      '<span class="qb-avatar" style="background:' + m.color + '">' + initials(m.name) + '</span>' +
+      '<span class="qb-user__info"><b>' + esc(m.name) + '</b><small>' + roleName(m.role) + '</small></span>' +
     '</div>';
   }
-  function wireUserSwitcher() {
-    const btn = root.querySelector('#qbUserBtn'); const menu = root.querySelector('#qbUserMenu');
-    if (!btn || !menu) return;
-    simpleMenu(btn, menu);
-    menu.querySelectorAll('[data-user]').forEach((b) => b.addEventListener('click', () => {
-      S.prefs.currentUserId = b.dataset.user; save(); closeMenu(menu, btn); render();
-      toast('Agora você está como ' + esc(me().name) + ' (' + roleName(myRole()) + ').', 'ok');
-    }));
-    const mg = menu.querySelector('[data-user-manage]'); if (mg) mg.addEventListener('click', () => { closeMenu(menu, btn); openTeamModal(); });
-  }
+  function wireUserSwitcher() { /* sem troca de perfil: nada a conectar */ }
   function initials(n) { return String(n || '?').trim().split(/\s+/).map((w) => w[0]).slice(0, 2).join('').toUpperCase(); }
 
   function notifBellHTML() {
@@ -481,7 +467,7 @@
         '<div class="qb-bhead__spacer"></div>' +
         userSwitcherHTML() + notifBellHTML() +
         (canEdit() ? '<button class="qb-ibtn" id="qbArchived" type="button" title="Itens arquivados (colunas e cartões)">' + ic('archive', 18) + '<span class="qb-ibtn__n">' + (archivedCount(b) || '') + '</span></button>' : '') +
-        (canAdmin() ? '<button class="qb-ibtn" id="qbSettings" type="button" title="Configurar quadro (etiquetas, campos, equipe)">' + ic('gear', 18) + '</button>' : '') +
+        (canAdmin() ? '<button class="qb-ibtn" id="qbSettings" type="button" title="Configurar quadro (etiquetas, campos)">' + ic('gear', 18) + '</button>' : '') +
         (canAdmin() ? '<button class="qb-ibtn" id="qbAutos" type="button" title="Automações">' + ic('bolt', 18) + '<span class="qb-ibtn__n">' + (b.automations.filter((a) => a.enabled).length || '') + '</span></button>' : '') +
         '<button class="qb-ibtn" id="qbHelp" type="button" title="Atalhos de teclado">' + ic('help', 18) + '</button>' +
       '</div>' +
@@ -1445,7 +1431,7 @@
     if (!canAdmin()) return;
     const m = genericModal('qb-modal--settings');
     let active = tab || 'labels';
-    const tabs = [['labels', 'tag', 'Etiquetas'], ['priorities', 'flag', 'Prioridades'], ['fields', 'hash', 'Campos'], ['team', 'users', 'Equipe']];
+    const tabs = [['labels', 'tag', 'Etiquetas'], ['priorities', 'flag', 'Prioridades'], ['fields', 'hash', 'Campos']];
     const paint = () => {
       m.body.innerHTML =
         '<div class="modal__eyebrow">Configurar</div><h2 class="modal__title serif">' + esc(b.name) + '</h2>' +

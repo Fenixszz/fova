@@ -555,11 +555,15 @@
         var merged = Object.assign({}, local, maps[which]);
         writeLS(LS[which], merged);
       });
+      // tombstones primeiro (local + servidor), pra o merge dos quadros já respeitar
+      dead = loadDead();
+      state.forEach(function (s) { if (s.key === 'boards_dead' && s.data) Object.assign(dead, s.data); });
+      saveDead(dead);
       state.forEach(function (s) {
         if (s.key === 'import' && s.data) writeLS(LS.imports, mergeImports(readLS(LS.imports), s.data));
         if (s.key === 'boards' && s.data) {
           var localB = readLS(LS.boards);
-          writeLS(LS.boards, localB ? mergeBoards(localB, s.data) : s.data);
+          writeLS(LS.boards, applyDead(localB ? mergeBoards(localB, s.data) : s.data, dead));
         }
       });
       // Primeira vez com Supabase: sobe o que só existe local pro servidor.
@@ -575,6 +579,7 @@
     if (rows.length) jobs.push(sb.from('crm_cards').upsert(rows));
     var imp = readLS(LS.imports); if (imp) jobs.push(sb.from('app_state').upsert({ key: 'import', data: imp, updated_at: new Date().toISOString(), updated_by: me.id }));
     var bo = readLS(LS.boards); if (bo) jobs.push(sb.from('app_state').upsert({ key: 'boards', data: bo, version: Date.now(), updated_at: new Date().toISOString(), updated_by: me.id }));
+    if (dead && Object.keys(dead).length) jobs.push(sb.from('app_state').upsert({ key: 'boards_dead', data: dead, version: Date.now(), updated_at: new Date().toISOString(), updated_by: me.id }));
     lastBoards = bo;
     return jobs.length ? Promise.all(jobs) : Promise.resolve();
   }
@@ -689,18 +694,58 @@
     return out;
   }
 
-  /* ---------- Quadros: snapshot + merge estrutural ---------- */
+  /* ---------- Quadros: snapshot + merge estrutural + tombstones ---------- */
+  // Exclusões viajam como "tombstones" (marcas de id apagado). Como os ids de
+  // quadro/coluna/cartão nunca são reaproveitados, um id morto fica morto para
+  // sempre — então apagar em um computador apaga no outro, de verdade.
+  var LS_DEAD = 'fova_boards_dead';
+  var dead = {};
+  function loadDead() { try { return JSON.parse(localStorage.getItem(LS_DEAD) || '{}'); } catch (e) { return {}; } }
+  function saveDead(d) { try { rawSetItem(LS_DEAD, JSON.stringify(d)); } catch (e) {} }
+  function collectIds(S) {
+    var ids = {};
+    (S && S.boards || []).forEach(function (b) { ids[b.id] = 1; (b.columns || []).forEach(function (c) { ids[c.id] = 1; }); (b.cards || []).forEach(function (c) { ids[c.id] = 1; }); });
+    return ids;
+  }
+  function applyDead(S, d) {
+    if (!S || !d) return S;
+    S.boards = (S.boards || []).filter(function (b) { return !d[b.id]; });
+    S.boards.forEach(function (b) {
+      b.columns = (b.columns || []).filter(function (c) { return !d[c.id]; });
+      b.cards = (b.cards || []).filter(function (c) { return !d[c.id]; });
+    });
+    return S;
+  }
+
   var boardsT = null;
   function scheduleBoardsPush() { pendingBoards = true; clearTimeout(boardsT); boardsT = setTimeout(pushBoards, 500); }
   function pushBoards() {
     if (!pendingBoards) return; pendingBoards = false;
     var S = readLS(LS.boards); if (!S) return;
+    // detecta o que foi apagado desde o último envio e vira tombstone
+    try {
+      var prevIds = collectIds(lastBoards), curIds = collectIds(S), t = Date.now(), changed = false;
+      Object.keys(prevIds).forEach(function (id) { if (!curIds[id] && !dead[id]) { dead[id] = t; changed = true; } });
+      if (changed) {
+        saveDead(dead);
+        sb.from('app_state').upsert({ key: 'boards_dead', data: dead, version: Date.now(), updated_at: new Date().toISOString(), updated_by: me.id }).then(function (r) { markConn(r.error ? 'recon' : 'ok'); });
+      }
+    } catch (e) { log('tombstone', e); }
     // histórico: cartões que mudaram desde o último envio
     try { diffBoardsForActivity(lastBoards, S); } catch (e) {}
     lastBoards = S;
     sb.from('app_state').upsert({ key: 'boards', data: S, version: Date.now(), updated_at: new Date().toISOString(), updated_by: me.id }).then(function (r) {
       markConn(r.error ? 'recon' : 'ok');
     });
+  }
+  function applyRemoteDead(d) {
+    if (!d) return;
+    var changed = false;
+    Object.keys(d).forEach(function (id) { if (!dead[id]) { dead[id] = d[id]; changed = true; } });
+    if (!changed) return;
+    saveDead(dead);
+    var S = readLS(LS.boards);
+    if (S) { applyDead(S, dead); applying = true; writeLS(LS.boards, S); applying = false; lastBoards = S; safeReloadBoards(); }
   }
   function diffBoardsForActivity(prev, cur) {
     if (!prev) return;
@@ -746,6 +791,7 @@
         }
       });
       // prefs: mantém as minhas (quadro aberto, densidade…)
+      applyDead(out, dead);   // tira o que foi apagado (em qualquer um dos lados)
       return out;
     } catch (e) { log('mergeBoards erro', e); return remoteS || localS; }
   }
@@ -769,6 +815,7 @@
       var row = p.new || p.old; if (!row) return;
       if (row.updated_by === me.id) return;
       if (row.key === 'boards') applyRemoteBoards(row.data);
+      if (row.key === 'boards_dead') applyRemoteDead(row.data);
       if (row.key === 'import') { applying = true; writeLS(LS.imports, mergeImports(readLS(LS.imports), row.data)); applying = false; safeReloadCRM(); }
     });
     channel.on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'activity' }, function (p) { renderHistItem(p.new, true); });

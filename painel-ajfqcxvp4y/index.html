@@ -1810,11 +1810,15 @@ window.FOVA_CFG = {
         var merged = Object.assign({}, local, maps[which]);
         writeLS(LS[which], merged);
       });
+      // tombstones primeiro (local + servidor), pra o merge dos quadros já respeitar
+      dead = loadDead();
+      state.forEach(function (s) { if (s.key === 'boards_dead' && s.data) Object.assign(dead, s.data); });
+      saveDead(dead);
       state.forEach(function (s) {
         if (s.key === 'import' && s.data) writeLS(LS.imports, mergeImports(readLS(LS.imports), s.data));
         if (s.key === 'boards' && s.data) {
           var localB = readLS(LS.boards);
-          writeLS(LS.boards, localB ? mergeBoards(localB, s.data) : s.data);
+          writeLS(LS.boards, applyDead(localB ? mergeBoards(localB, s.data) : s.data, dead));
         }
       });
       // Primeira vez com Supabase: sobe o que só existe local pro servidor.
@@ -1830,6 +1834,7 @@ window.FOVA_CFG = {
     if (rows.length) jobs.push(sb.from('crm_cards').upsert(rows));
     var imp = readLS(LS.imports); if (imp) jobs.push(sb.from('app_state').upsert({ key: 'import', data: imp, updated_at: new Date().toISOString(), updated_by: me.id }));
     var bo = readLS(LS.boards); if (bo) jobs.push(sb.from('app_state').upsert({ key: 'boards', data: bo, version: Date.now(), updated_at: new Date().toISOString(), updated_by: me.id }));
+    if (dead && Object.keys(dead).length) jobs.push(sb.from('app_state').upsert({ key: 'boards_dead', data: dead, version: Date.now(), updated_at: new Date().toISOString(), updated_by: me.id }));
     lastBoards = bo;
     return jobs.length ? Promise.all(jobs) : Promise.resolve();
   }
@@ -1944,18 +1949,58 @@ window.FOVA_CFG = {
     return out;
   }
 
-  /* ---------- Quadros: snapshot + merge estrutural ---------- */
+  /* ---------- Quadros: snapshot + merge estrutural + tombstones ---------- */
+  // Exclusões viajam como "tombstones" (marcas de id apagado). Como os ids de
+  // quadro/coluna/cartão nunca são reaproveitados, um id morto fica morto para
+  // sempre — então apagar em um computador apaga no outro, de verdade.
+  var LS_DEAD = 'fova_boards_dead';
+  var dead = {};
+  function loadDead() { try { return JSON.parse(localStorage.getItem(LS_DEAD) || '{}'); } catch (e) { return {}; } }
+  function saveDead(d) { try { rawSetItem(LS_DEAD, JSON.stringify(d)); } catch (e) {} }
+  function collectIds(S) {
+    var ids = {};
+    (S && S.boards || []).forEach(function (b) { ids[b.id] = 1; (b.columns || []).forEach(function (c) { ids[c.id] = 1; }); (b.cards || []).forEach(function (c) { ids[c.id] = 1; }); });
+    return ids;
+  }
+  function applyDead(S, d) {
+    if (!S || !d) return S;
+    S.boards = (S.boards || []).filter(function (b) { return !d[b.id]; });
+    S.boards.forEach(function (b) {
+      b.columns = (b.columns || []).filter(function (c) { return !d[c.id]; });
+      b.cards = (b.cards || []).filter(function (c) { return !d[c.id]; });
+    });
+    return S;
+  }
+
   var boardsT = null;
   function scheduleBoardsPush() { pendingBoards = true; clearTimeout(boardsT); boardsT = setTimeout(pushBoards, 500); }
   function pushBoards() {
     if (!pendingBoards) return; pendingBoards = false;
     var S = readLS(LS.boards); if (!S) return;
+    // detecta o que foi apagado desde o último envio e vira tombstone
+    try {
+      var prevIds = collectIds(lastBoards), curIds = collectIds(S), t = Date.now(), changed = false;
+      Object.keys(prevIds).forEach(function (id) { if (!curIds[id] && !dead[id]) { dead[id] = t; changed = true; } });
+      if (changed) {
+        saveDead(dead);
+        sb.from('app_state').upsert({ key: 'boards_dead', data: dead, version: Date.now(), updated_at: new Date().toISOString(), updated_by: me.id }).then(function (r) { markConn(r.error ? 'recon' : 'ok'); });
+      }
+    } catch (e) { log('tombstone', e); }
     // histórico: cartões que mudaram desde o último envio
     try { diffBoardsForActivity(lastBoards, S); } catch (e) {}
     lastBoards = S;
     sb.from('app_state').upsert({ key: 'boards', data: S, version: Date.now(), updated_at: new Date().toISOString(), updated_by: me.id }).then(function (r) {
       markConn(r.error ? 'recon' : 'ok');
     });
+  }
+  function applyRemoteDead(d) {
+    if (!d) return;
+    var changed = false;
+    Object.keys(d).forEach(function (id) { if (!dead[id]) { dead[id] = d[id]; changed = true; } });
+    if (!changed) return;
+    saveDead(dead);
+    var S = readLS(LS.boards);
+    if (S) { applyDead(S, dead); applying = true; writeLS(LS.boards, S); applying = false; lastBoards = S; safeReloadBoards(); }
   }
   function diffBoardsForActivity(prev, cur) {
     if (!prev) return;
@@ -2001,6 +2046,7 @@ window.FOVA_CFG = {
         }
       });
       // prefs: mantém as minhas (quadro aberto, densidade…)
+      applyDead(out, dead);   // tira o que foi apagado (em qualquer um dos lados)
       return out;
     } catch (e) { log('mergeBoards erro', e); return remoteS || localS; }
   }
@@ -2024,6 +2070,7 @@ window.FOVA_CFG = {
       var row = p.new || p.old; if (!row) return;
       if (row.updated_by === me.id) return;
       if (row.key === 'boards') applyRemoteBoards(row.data);
+      if (row.key === 'boards_dead') applyRemoteDead(row.data);
       if (row.key === 'import') { applying = true; writeLS(LS.imports, mergeImports(readLS(LS.imports), row.data)); applying = false; safeReloadCRM(); }
     });
     channel.on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'activity' }, function (p) { renderHistItem(p.new, true); });
@@ -4204,28 +4251,14 @@ window.CRM_ENC = {"salt":"etWMD1AXOF77tYAYY4hIlg==","iv":"TXLvfjzNy/w/u26/","ct"
      TROCA DE PERFIL (demonstra permissões) + sino de notificações
      ------------------------------------------------------------ */
   function userSwitcherHTML() {
+    // Identidade vem do login (um por sócio). Sem troca de perfil nem equipe.
     const m = me();
-    return '<div class="qb-user menu-wrap">' +
-      '<button class="qb-user__btn" id="qbUserBtn" type="button" aria-haspopup="true" aria-expanded="false" title="Trocar de perfil">' +
-        '<span class="qb-avatar" style="background:' + m.color + '">' + initials(m.name) + '</span>' +
-        '<span class="qb-user__info"><b>' + esc(m.name) + '</b><small>' + roleName(m.role) + '</small></span>' + ic('chevD', 15) +
-      '</button>' +
-      '<div class="menu" id="qbUserMenu" role="menu" hidden>' +
-        S.members.map((x) => '<button class="menu__item" type="button" data-user="' + x.id + '"><span class="qb-avatar qb-avatar--sm" style="background:' + x.color + '">' + initials(x.name) + '</span><span>' + esc(x.name) + '</span><span class="menu__badge">' + roleName(x.role) + '</span></button>').join('') +
-        (canAdmin() ? '<div class="menu__sep"></div><button class="menu__item" type="button" data-user-manage="1">' + ic('users') + '<span>Gerenciar equipe</span></button>' : '') +
-      '</div>' +
+    return '<div class="qb-user">' +
+      '<span class="qb-avatar" style="background:' + m.color + '">' + initials(m.name) + '</span>' +
+      '<span class="qb-user__info"><b>' + esc(m.name) + '</b><small>' + roleName(m.role) + '</small></span>' +
     '</div>';
   }
-  function wireUserSwitcher() {
-    const btn = root.querySelector('#qbUserBtn'); const menu = root.querySelector('#qbUserMenu');
-    if (!btn || !menu) return;
-    simpleMenu(btn, menu);
-    menu.querySelectorAll('[data-user]').forEach((b) => b.addEventListener('click', () => {
-      S.prefs.currentUserId = b.dataset.user; save(); closeMenu(menu, btn); render();
-      toast('Agora você está como ' + esc(me().name) + ' (' + roleName(myRole()) + ').', 'ok');
-    }));
-    const mg = menu.querySelector('[data-user-manage]'); if (mg) mg.addEventListener('click', () => { closeMenu(menu, btn); openTeamModal(); });
-  }
+  function wireUserSwitcher() { /* sem troca de perfil: nada a conectar */ }
   function initials(n) { return String(n || '?').trim().split(/\s+/).map((w) => w[0]).slice(0, 2).join('').toUpperCase(); }
 
   function notifBellHTML() {
@@ -4300,7 +4333,7 @@ window.CRM_ENC = {"salt":"etWMD1AXOF77tYAYY4hIlg==","iv":"TXLvfjzNy/w/u26/","ct"
         '<div class="qb-bhead__spacer"></div>' +
         userSwitcherHTML() + notifBellHTML() +
         (canEdit() ? '<button class="qb-ibtn" id="qbArchived" type="button" title="Itens arquivados (colunas e cartões)">' + ic('archive', 18) + '<span class="qb-ibtn__n">' + (archivedCount(b) || '') + '</span></button>' : '') +
-        (canAdmin() ? '<button class="qb-ibtn" id="qbSettings" type="button" title="Configurar quadro (etiquetas, campos, equipe)">' + ic('gear', 18) + '</button>' : '') +
+        (canAdmin() ? '<button class="qb-ibtn" id="qbSettings" type="button" title="Configurar quadro (etiquetas, campos)">' + ic('gear', 18) + '</button>' : '') +
         (canAdmin() ? '<button class="qb-ibtn" id="qbAutos" type="button" title="Automações">' + ic('bolt', 18) + '<span class="qb-ibtn__n">' + (b.automations.filter((a) => a.enabled).length || '') + '</span></button>' : '') +
         '<button class="qb-ibtn" id="qbHelp" type="button" title="Atalhos de teclado">' + ic('help', 18) + '</button>' +
       '</div>' +
@@ -5264,7 +5297,7 @@ window.CRM_ENC = {"salt":"etWMD1AXOF77tYAYY4hIlg==","iv":"TXLvfjzNy/w/u26/","ct"
     if (!canAdmin()) return;
     const m = genericModal('qb-modal--settings');
     let active = tab || 'labels';
-    const tabs = [['labels', 'tag', 'Etiquetas'], ['priorities', 'flag', 'Prioridades'], ['fields', 'hash', 'Campos'], ['team', 'users', 'Equipe']];
+    const tabs = [['labels', 'tag', 'Etiquetas'], ['priorities', 'flag', 'Prioridades'], ['fields', 'hash', 'Campos']];
     const paint = () => {
       m.body.innerHTML =
         '<div class="modal__eyebrow">Configurar</div><h2 class="modal__title serif">' + esc(b.name) + '</h2>' +
