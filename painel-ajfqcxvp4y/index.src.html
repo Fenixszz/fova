@@ -161,6 +161,32 @@
     .sidebar__foot { margin-top: auto; padding: 16px 10px 4px; border-top: 1px solid var(--line-soft); color: var(--text-3); font-size: 11.5px; line-height: 1.55; }
     .sidebar__foot a { color: var(--text-2); text-decoration: underline; text-underline-offset: 2px; }
 
+    /* ---- fechar / abrir a barra lateral ---- */
+    .app { transition: grid-template-columns .24s cubic-bezier(.4, 0, .2, 1); }
+    .sb-toggle {
+      margin-left: auto; width: 30px; height: 30px; flex: none; display: grid; place-items: center;
+      border-radius: 8px; border: 1px solid var(--line-soft); background: var(--bg-2); color: var(--text-2);
+      cursor: pointer; transition: background .14s, color .14s, border-color .14s;
+    }
+    .sb-toggle:hover { background: var(--bg-3); color: var(--text); border-color: var(--line); }
+    .sb-toggle:focus-visible { outline: 2px solid var(--brand); outline-offset: 1px; }
+    .sb-toggle svg { width: 16px; height: 16px; transition: transform .24s ease; }
+    /* estado fechado: vira uma trilha só de ícones */
+    .app.sb-collapsed { --sb-w: 68px; }
+    .app.sb-collapsed .sidebar { padding: 24px 14px; }
+    .app.sb-collapsed .brand-row { justify-content: center; padding: 4px 0 18px; }
+    .app.sb-collapsed .brand-row__logo, .app.sb-collapsed .brand-row__tag { display: none; }
+    .app.sb-collapsed .sb-toggle { margin-left: 0; }
+    .app.sb-collapsed .sb-toggle svg { transform: rotate(180deg); }
+    .app.sb-collapsed .nav__item { justify-content: center; gap: 0; padding: 11px 0; }
+    .app.sb-collapsed .nav__item .lbl { display: none; }
+    .app.sb-collapsed .nav__badge {
+      position: absolute; top: 5px; right: 8px; margin: 0; min-width: 8px; width: 8px; height: 8px;
+      padding: 0; font-size: 0; line-height: 0; border-radius: 999px;
+    }
+    .app.sb-collapsed .nav__badge[data-zero="1"] { display: none; }
+    .app.sb-collapsed .sidebar__foot { display: none; }
+
     /* mobile topbar */
     .topbar { display: none; }
 
@@ -309,6 +335,9 @@
       animation: menuIn .14s ease both;
     }
     .menu[hidden] { display: none; }
+    /* na tela inicial dos quadros o usuário e o sino ficam na borda esquerda — abre o menu
+       alinhado à esquerda pra não vazar pra fora da tela (ficava coberto pela barra lateral) */
+    .qb-home-bar .menu { left: 0; right: auto; }
     @keyframes menuIn { from { opacity: 0; transform: translateY(-5px); } to { opacity: 1; transform: none; } }
     .menu__item {
       display: flex; align-items: center; gap: 11px; width: 100%; text-align: left; padding: 10px 11px; border-radius: 9px;
@@ -642,6 +671,7 @@
     .qb-muted { color: var(--text-3); }
     .qb-sw { display: inline-block; width: 10px; height: 10px; border-radius: 3px; flex: none; vertical-align: middle; }
     .qb-sw--lg { width: 16px; height: 16px; border-radius: 5px; }
+    .qb-table td > .qb-sw { margin-right: 7px; }   /* bolinha da coluna não cola no nome */
     .qb-x { display: inline-grid; place-items: center; width: 28px; height: 28px; border-radius: 8px; border: none; background: none; color: var(--text-3); cursor: pointer; transition: color .14s, background .14s; flex: none; }
     .qb-x:hover { color: var(--text); background: var(--bg-3); }
     .qb-x svg { width: 15px; height: 15px; }
@@ -775,6 +805,8 @@
     .qb-col__sum { display: flex; align-items: center; gap: 6px; padding: 8px 14px; font-size: 12px; font-weight: 600; color: var(--brand-mid); border-bottom: 1px solid var(--line-soft); }
     .qb-col__sum svg { opacity: .8; }
     .qb-col__body { padding: 11px; display: flex; flex-direction: column; gap: 9px; overflow-y: auto; min-height: 20px; }
+    /* numa coluna flex com muitos cartões, o flex-shrink padrão esmaga cada cartão pra caber na altura — trava isso pra manterem a altura real e a coluna rolar */
+    .qb-col__body > * { flex-shrink: 0; }
     .qb-col__empty { text-align: center; color: var(--text-3); font-size: 12px; padding: 14px 8px; border: 1px dashed var(--line); border-radius: 10px; }
     .qb-col__empty.hidden { display: none; }
     .qb-col__add { display: flex; align-items: center; gap: 7px; width: 100%; padding: 10px 13px; border: none; border-top: 1px solid var(--line-soft); background: none; color: var(--text-2); font-family: var(--font); font-size: 13px; cursor: pointer; border-radius: 0 0 var(--radius) var(--radius); transition: background .14s, color .14s; }
@@ -994,6 +1026,23 @@
     .qb-gen__card { width: min(620px, 100%); max-height: calc(100dvh - 40px); }
     .qb-gen__x { position: absolute; top: 16px; right: 16px; z-index: 3; }
     .qb-gen__body { padding: 24px; }
+    /* ---- painel de itens arquivados (colunas + cartões) ---- */
+    .qb-arch__intro { margin: -4px 0 18px; }
+    .qb-arch__sec { margin-top: 20px; }
+    .qb-arch__sec:first-of-type { margin-top: 6px; }
+    .qb-arch__h { display: flex; align-items: center; gap: 8px; font-size: 12px; font-weight: 700; letter-spacing: .05em; text-transform: uppercase; color: var(--text-3); margin-bottom: 10px; }
+    .qb-arch__h svg { width: 15px; height: 15px; opacity: .8; flex: none; }
+    .qb-arch__count { font-size: 11px; font-weight: 700; color: var(--text-2); background: var(--bg-3); border-radius: 999px; padding: 1px 8px; }
+    .qb-arch__list { display: flex; flex-direction: column; gap: 7px; }
+    .qb-arch__row { display: flex; align-items: center; gap: 11px; padding: 10px 12px; border: 1px solid var(--line-soft); border-radius: 11px; background: var(--bg-1); }
+    .qb-arch__dot { width: 10px; height: 10px; border-radius: 3px; flex: none; }
+    .qb-arch__name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 600; font-size: 14px; color: var(--text); }
+    .qb-arch__meta { flex: none; font-size: 12px; color: var(--text-3); }
+    .qb-arch__btn { flex: none; display: inline-flex; align-items: center; gap: 6px; padding: 7px 13px; border-radius: 9px; border: 1px solid var(--line); background: var(--bg-2); color: var(--brand-bright); font-family: var(--font); font-size: 13px; font-weight: 600; cursor: pointer; transition: background .13s, border-color .13s; }
+    .qb-arch__btn svg { width: 14px; height: 14px; }
+    .qb-arch__btn:hover { background: var(--bg-3); border-color: var(--brand); }
+    .qb-arch__btn:focus-visible { outline: 2px solid var(--brand); outline-offset: 1px; }
+    .qb-arch__empty { padding: 15px; text-align: center; color: var(--text-3); font-size: 13px; border: 1px dashed var(--line-soft); border-radius: 11px; }
     .qb-settabs { display: flex; gap: 4px; margin: 16px 0 18px; padding: 4px; background: var(--bg-base); border: 1px solid var(--line-soft); border-radius: 12px; flex-wrap: wrap; }
     .qb-settab { display: inline-flex; align-items: center; gap: 7px; height: 36px; padding: 0 13px; border-radius: 9px; border: none; background: none; color: var(--text-2); font-family: var(--font); font-size: 13px; font-weight: 500; cursor: pointer; transition: all .14s; }
     .qb-settab:hover { color: var(--text); }
@@ -1087,6 +1136,9 @@
       <div class="brand-row">
         <img class="brand-row__logo" src="/public/fova-white-crop.svg" alt="FOVA" />
         <span class="brand-row__tag">CRM</span>
+        <button class="sb-toggle" id="sbToggle" type="button" aria-label="Fechar barra lateral" aria-expanded="true" title="Fechar barra lateral">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 6l-6 6 6 6" /></svg>
+        </button>
       </div>
       <nav class="nav" id="nav" aria-label="Seções"></nav>
       <div class="sidebar__foot">
@@ -1174,8 +1226,13 @@
       }, 2500);
     });
   </script>
+  <!-- Colaboração em tempo real + login por sócio (opcional; liga ao preencher config.js) -->
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.min.js"></script>
+  <script src="config.js?v=1"></script>
+  <script src="sync.js?v=1"></script>
   <script src="crm-data.enc.js?v=7"></script>
   <script src="app.js?v=7"></script>
   <script src="boards.js?v=1"></script>
+  <script src="undo.js?v=1"></script>
 </body>
 </html>

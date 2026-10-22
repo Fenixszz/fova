@@ -13,12 +13,19 @@ let html = read('index.src.html');
 const enc = read('crm-data.enc.js');
 const app = read('app.js');
 const boards = read('boards.js');
+const undo = read('undo.js');
+const config = read('config.js');
+const sync = read('sync.js');
 
 const inline = (content) => () => '  <script>\n' + content + '\n</script>';   // função → sem interpretação de $ na substituição
 
+// O cliente Supabase continua vindo do CDN (externo). O resto é embutido.
+html = html.replace('  <script src="config.js?v=1"></script>', inline(config));
+html = html.replace('  <script src="sync.js?v=1"></script>', inline(sync));
 html = html.replace('  <script src="crm-data.enc.js?v=7"></script>', inline(enc));
 html = html.replace('  <script src="app.js?v=7"></script>', inline(app));
 html = html.replace('  <script src="boards.js?v=1"></script>', inline(boards));
+html = html.replace('  <script src="undo.js?v=1"></script>', inline(undo));
 
 writeFileSync(new URL('index.html', here), html);
 console.log('index.html gerado (' + html.length + ' bytes).');

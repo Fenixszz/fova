@@ -313,6 +313,7 @@
     return { total: cards.length, done: done, pct: cards.length ? Math.round(done / cards.length * 100) : 0 };
   }
   function renderHome() {
+    if (showArchivedBoards && !S.boards.some((b) => b.archived)) showArchivedBoards = false;   // sem arquivados, volta pros ativos (não trava na tela vazia)
     const boards = S.boards.filter((b) => showArchivedBoards ? b.archived : !b.archived);
     const archivedN = S.boards.filter((b) => b.archived).length;
     root.className = 'qb qb--home';
@@ -479,6 +480,7 @@
         '<h1 class="qb-btitle" id="qbTitle" tabindex="0" title="' + (canEdit() ? 'Clique para renomear' : '') + '">' + esc(b.name) + '</h1>' +
         '<div class="qb-bhead__spacer"></div>' +
         userSwitcherHTML() + notifBellHTML() +
+        (canEdit() ? '<button class="qb-ibtn" id="qbArchived" type="button" title="Itens arquivados (colunas e cartões)">' + ic('archive', 18) + '<span class="qb-ibtn__n">' + (archivedCount(b) || '') + '</span></button>' : '') +
         (canAdmin() ? '<button class="qb-ibtn" id="qbSettings" type="button" title="Configurar quadro (etiquetas, campos, equipe)">' + ic('gear', 18) + '</button>' : '') +
         (canAdmin() ? '<button class="qb-ibtn" id="qbAutos" type="button" title="Automações">' + ic('bolt', 18) + '<span class="qb-ibtn__n">' + (b.automations.filter((a) => a.enabled).length || '') + '</span></button>' : '') +
         '<button class="qb-ibtn" id="qbHelp" type="button" title="Atalhos de teclado">' + ic('help', 18) + '</button>' +
@@ -504,6 +506,7 @@
     const title = root.querySelector('#qbTitle');
     if (canEdit()) title.addEventListener('click', () => inlineRenameBoard(b, title));
     wireUserSwitcher(); wireNotifBell();
+    const arc = root.querySelector('#qbArchived'); if (arc) arc.addEventListener('click', () => openArchived(b));
     const set = root.querySelector('#qbSettings'); if (set) set.addEventListener('click', () => openSettings(b));
     const au = root.querySelector('#qbAutos'); if (au) au.addEventListener('click', () => openAutomations(b));
     root.querySelector('#qbHelp').addEventListener('click', openShortcuts);
@@ -642,6 +645,10 @@
     else if (ui.view === 'tabela') renderTable(b, ui, stage);
     else if (ui.view === 'calendario') renderCalendar(b, ui, stage);
     else if (ui.view === 'linha') renderTimeline(b, ui, stage);
+    updateArchBadge(b);   // mantém o contador de arquivados em dia a cada re-render das colunas
+  }
+  function updateArchBadge(b) {
+    const el = root.querySelector('#qbArchived .qb-ibtn__n'); if (el) el.textContent = archivedCount(b) || '';
   }
 
   /* ------------------------------------------------------------
@@ -724,8 +731,8 @@
   let dragCardId = null;
   function wireCardDnD(b, ui, stage) {
     stage.querySelectorAll('.qb-card').forEach((card) => {
-      card.addEventListener('dragstart', (e) => { dragCardId = card.dataset.card; card.classList.add('qb-dragging'); try { e.dataTransfer.effectAllowed = 'move'; e.dataTransfer.setData('text/plain', card.dataset.card); } catch (_) {} });
-      card.addEventListener('dragend', () => { card.classList.remove('qb-dragging'); dragCardId = null; stage.querySelectorAll('.qb-col').forEach((c) => c.classList.remove('qb-drop')); stage.querySelectorAll('.qb-ph').forEach((p) => p.remove()); });
+      card.addEventListener('dragstart', (e) => { dragCardId = card.dataset.card; card.classList.add('qb-dragging'); try { window.FOVASync && FOVASync.enabled && FOVASync.liveDrag(dragCardId, b.id); } catch (_) {} try { e.dataTransfer.effectAllowed = 'move'; e.dataTransfer.setData('text/plain', card.dataset.card); } catch (_) {} });
+      card.addEventListener('dragend', () => { try { window.FOVASync && FOVASync.enabled && FOVASync.liveDrop(card.dataset.card, b.id); } catch (_) {} card.classList.remove('qb-dragging'); dragCardId = null; stage.querySelectorAll('.qb-col').forEach((c) => c.classList.remove('qb-drop')); stage.querySelectorAll('.qb-ph').forEach((p) => p.remove()); });
     });
     stage.querySelectorAll('[data-drop]').forEach((body) => {
       body.addEventListener('dragover', (e) => {
@@ -1054,12 +1061,14 @@
   function openCard(id) {
     const b = curBoard(); const c = findCard(id); if (!b || !c) return;
     curCardId = id; _lastFocus = document.activeElement;
+    try { window.FOVASync && FOVASync.enabled && FOVASync.liveEdit(id, b.id); } catch (e) {}
     const m = ensureModal(); m.hidden = false; try { document.body.style.overflow = 'hidden'; } catch (e) {}
     renderCard();
     setTimeout(() => { const t = m.querySelector('.qb-cm__title'); if (t) t.focus(); }, 30);
   }
   function closeCard() {
     if (!modalEl || modalEl.hidden) return;
+    try { window.FOVASync && FOVASync.enabled && FOVASync.liveBlur(curCardId, (curBoard() || {}).id); } catch (e) {}
     modalEl.hidden = true; curCardId = null;
     try { document.body.style.overflow = ''; } catch (e) {}
     try { if (_lastFocus && _lastFocus.focus) _lastFocus.focus(); } catch (e) {}
@@ -1506,6 +1515,61 @@
   }
   function openTeamModal() { const b = curBoard(); if (b) openSettings(b, 'team'); else { const m = genericModal('qb-modal--settings'); m.body.innerHTML = '<div class="modal__eyebrow">Equipe</div><h2 class="modal__title serif">Gerenciar <em>equipe</em></h2><div id="qbTeamHost" style="margin-top:16px"></div>'; m.onClose = () => { save(); render(); }; setTeam(m.body.querySelector('#qbTeamHost')); m.show(); } }
 
+  /* ---------- Arquivados (colunas e cartões): ver e restaurar ---------- */
+  function archivedCount(b) {
+    return b.cards.filter((c) => c.archived).length + b.columns.filter((c) => c.archived).length;
+  }
+  function openArchived(b) {
+    if (!canEdit()) return;
+    const m = genericModal('qb-modal--settings qb-modal--arch');
+    const paint = () => {
+      const cols = b.columns.filter((c) => c.archived);
+      const cards = b.cards.filter((c) => c.archived);
+      const section = (icon, title, count, rows, empty) =>
+        '<div class="qb-arch__sec"><div class="qb-arch__h">' + ic(icon, 15) + title + '<span class="qb-arch__count">' + count + '</span></div>' +
+        (count ? '<div class="qb-arch__list">' + rows + '</div>' : '<div class="qb-arch__empty">' + empty + '</div>') + '</div>';
+
+      const colRows = cols.map((c) => {
+        const n = b.cards.filter((x) => x.columnId === c.id && !x.archived).length;
+        return '<div class="qb-arch__row"><span class="qb-arch__dot" style="background:' + c.color + '"></span>' +
+          '<span class="qb-arch__name">' + esc(c.name) + '</span>' +
+          '<span class="qb-arch__meta">' + n + (n === 1 ? ' cartão' : ' cartões') + '</span>' +
+          (canAdmin() ? '<button class="qb-arch__btn" type="button" data-rescol="' + c.id + '">' + ic('history', 14) + 'Restaurar</button>' : '<span class="qb-arch__meta">só admin</span>') +
+          '</div>';
+      }).join('');
+
+      const cardRows = cards.map((c) => {
+        const col = b.columns.find((x) => x.id === c.columnId);
+        const dot = col && !col.archived ? col.color : 'var(--line)';
+        const where = col ? (col.archived ? 'coluna arquivada' : 'em ' + esc(col.name)) : 'coluna removida';
+        return '<div class="qb-arch__row"><span class="qb-arch__dot" style="background:' + dot + '"></span>' +
+          '<span class="qb-arch__name">' + esc(c.title || 'Sem título') + '</span>' +
+          '<span class="qb-arch__meta">' + where + '</span>' +
+          '<button class="qb-arch__btn" type="button" data-rescard="' + c.id + '">' + ic('history', 14) + 'Restaurar</button>' +
+          '</div>';
+      }).join('');
+
+      m.body.innerHTML =
+        '<div class="modal__eyebrow">Arquivados</div><h2 class="modal__title serif">Itens <em>arquivados</em></h2>' +
+        '<p class="qb-muted qb-arch__intro">Arquivar não apaga nada — fica guardado aqui. É só restaurar quando quiser.</p>' +
+        section('kanban', 'Colunas', cols.length, colRows, 'Nenhuma coluna arquivada.') +
+        section('copy', 'Cartões', cards.length, cardRows, 'Nenhum cartão arquivado.');
+
+      m.body.querySelectorAll('[data-rescol]').forEach((btn) => btn.addEventListener('click', () => {
+        const col = b.columns.find((x) => x.id === btn.dataset.rescol);
+        if (col) { col.archived = false; save(); renderBoard(); paint(); toast('Coluna restaurada.', 'ok'); }
+      }));
+      m.body.querySelectorAll('[data-rescard]').forEach((btn) => btn.addEventListener('click', () => {
+        const c = b.cards.find((x) => x.id === btn.dataset.rescard); if (!c) return;
+        let col = b.columns.find((x) => x.id === c.columnId && !x.archived);
+        if (!col) { col = b.columns.find((x) => !x.archived); if (col) c.columnId = col.id; else { toast('Crie uma coluna ativa antes de restaurar este cartão.', 'bad'); return; } }
+        c.archived = false; c.order = b.cards.filter((x) => x.columnId === c.columnId && !x.archived).length; touchCard(c);
+        save(); renderBoard(); paint(); toast('Cartão restaurado.', 'ok');
+      }));
+    };
+    paint(); m.show();
+  }
+
   /* ============================================================
      AUTOMAÇÕES ("quando… então…")
      ============================================================ */
@@ -1680,7 +1744,15 @@
     document.addEventListener('keydown', onKeydown, true);
   }
 
-  window.Boards = { init: init, render: render };
+  // Relê o estado dos Quadros do localStorage e redesenha — usado pelo desfazer/refazer (undo.js).
+  function reload() {
+    if (!inited) { init(); return; }
+    load();
+    if (screen === 'board' && !curBoard()) { curBoardId = null; screen = 'home'; }
+    render();
+  }
+
+  window.Boards = { init: init, render: render, reload: reload };
   // caso o app já tenha dado boot antes deste script carregar (sessão restaurada)
   try { if (F.isBooted && F.isBooted()) init(); } catch (e) {}
 })();

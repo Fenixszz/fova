@@ -266,8 +266,21 @@
     });
   })();
 
+  /* ---------- gancho de login/colaboração (sync.js) ----------
+     Quando o Supabase está configurado (config.js), o login por sócio
+     assume o controle: a senha única fica desligada e o boot acontece
+     pela chamada FOVA_GATE.open() depois da autenticação. Sem Supabase,
+     tudo abaixo funciona exatamente como antes. */
+  window.FOVA_GATE = {
+    enabled: function () { return !!(window.FOVA_CFG && window.FOVA_CFG.supabaseUrl && window.FOVA_CFG.supabaseAnonKey); },
+    needsPassword: function () { return !!window.CRM_ENC; },
+    unlock: function (pw) { return tryUnlock(pw); },
+    open: function () { try { lock.hidden = true; app.hidden = false; } catch (e) {} boot(); },
+  };
+
   $('#lockForm').addEventListener('submit', async (e) => {
     e.preventDefault();
+    if (window.FOVA_GATE.enabled()) return;   // login por sócio cuida disso
     const input = $('#lockInput'), err = $('#lockErr');
     const btn = e.target.querySelector('.lock__btn');
     btn.disabled = true; err.textContent = '';
@@ -284,7 +297,10 @@
 
   let _sessOk = false;
   try { _sessOk = sessionStorage.getItem('fova_adm_ok') === '1'; } catch (e) { _sessOk = false; }
-  if (_sessOk && !window.CRM_ENC && window.CRM) {
+  if (window.FOVA_GATE.enabled()) {
+    // Supabase ligado: o sync.js mostra o login por sócio e chama FOVA_GATE.open().
+    try { lock.hidden = true; } catch (e) {}
+  } else if (_sessOk && !window.CRM_ENC && window.CRM) {
     BASELINE = window.CRM; rebuildData(); lock.hidden = true; app.hidden = false; document.addEventListener('DOMContentLoaded', boot);
     if (document.readyState !== 'loading') boot();
   } else {
@@ -393,7 +409,7 @@
   let booted = false;
   function boot() {
     if (booted) return; booted = true;
-    buildNav(); renderHoje(); renderQuadro(); renderLeads(); renderDecisores();
+    buildNav(); initSidebarToggle(); renderHoje(); renderQuadro(); renderLeads(); renderDecisores();
     try { if (window.Boards && window.Boards.init) window.Boards.init(); } catch (e) {}
     const initial = (location.hash || '').replace('#', '');
     go(VIEWS.some((v) => v.id === initial) ? initial : 'hoje');
@@ -403,13 +419,37 @@
       const nav = $(sel); nav.innerHTML = '';
       VIEWS.forEach((v) => {
         const b = el('button', 'nav__item');
-        b.type = 'button'; b.dataset.go = v.id;
+        b.type = 'button'; b.dataset.go = v.id; b.title = v.label;   // title → tooltip quando a barra está fechada (só ícones)
         b.innerHTML = icon(v.ico) + '<span class="lbl">' + v.label + '</span>' + (v.badge ? '<span class="nav__badge" data-badge="' + (v.badge === true ? 'leads' : v.badge) + '"></span>' : '');
         b.addEventListener('click', () => go(v.id));
         nav.appendChild(b);
       });
     });
   }
+  /* ---------- fechar / abrir a barra lateral (lembra a escolha neste aparelho) ---------- */
+  function initSidebarToggle() {
+    const app = $('#app'), btn = $('#sbToggle');
+    if (!app || !btn) return;
+    const KEY = 'fova_sb_collapsed';
+    const apply = (on) => {
+      app.classList.toggle('sb-collapsed', on);
+      btn.setAttribute('aria-expanded', on ? 'false' : 'true');
+      btn.setAttribute('aria-label', on ? 'Abrir barra lateral' : 'Fechar barra lateral');
+      btn.setAttribute('title', on ? 'Abrir barra lateral' : 'Fechar barra lateral');
+    };
+    let saved = false;
+    try { saved = localStorage.getItem(KEY) === '1'; } catch (e) {}
+    if (saved) {   // aplica o estado salvo sem animar na abertura da página
+      app.style.transition = 'none'; apply(true);
+      requestAnimationFrame(() => requestAnimationFrame(() => { app.style.transition = ''; }));
+    } else { apply(false); }
+    btn.addEventListener('click', () => {
+      const on = !app.classList.contains('sb-collapsed');
+      apply(on);
+      try { localStorage.setItem(KEY, on ? '1' : '0'); } catch (e) {}
+    });
+  }
+
   function go(id) {
     document.querySelectorAll('.view').forEach((s) => s.classList.toggle('is-active', s.dataset.view === id));
     document.querySelectorAll('.nav__item').forEach((n) => n.classList.toggle('is-active', n.dataset.go === id));
@@ -1460,6 +1500,15 @@
     normKey: normKey, isReal: isReal, statusOf: statusOf, setStatus: setStatus,
     segCat: segCat, bairro: bairro, STATUSES: STATUSES, fmtDate: fmtDate,
     openLead: openLead, isBooted: function () { return booted; },
+    // Relê o estado do CRM do localStorage e redesenha — usado pelo desfazer/refazer (undo.js).
+    reload: function () {
+      try { overrides = JSON.parse(localStorage.getItem(LS_KEY) || '{}'); } catch (e) { overrides = {}; }
+      try { touch = JSON.parse(localStorage.getItem(LS_TOUCH) || '{}'); } catch (e) { touch = {}; }
+      try { deleted = JSON.parse(localStorage.getItem(LS_DELETED) || '{}'); } catch (e) { deleted = {}; }
+      try { archived = JSON.parse(localStorage.getItem(LS_ARCHIVED) || '{}'); } catch (e) { archived = {}; }
+      try { renamed = JSON.parse(localStorage.getItem(LS_RENAMED) || '{}'); } catch (e) { renamed = {}; }
+      if (booted) { rebuildData(); rerenderAll(); }
+    },
   };
 
 })();
