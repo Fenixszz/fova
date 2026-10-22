@@ -19,6 +19,9 @@
   const toastUndo = F.toastUndo || ((m, fn) => toast(m));
   const isReal = F.isReal || ((v) => v != null && String(v).trim() !== '');
   const getData = F.getData || (() => null);
+  // Alterna um valor num array (etiquetas/responsáveis/filtros): tira se já
+  // está, adiciona se não está. Edita o próprio array e o devolve.
+  const toggleArr = (arr, v) => { const i = arr.indexOf(v); if (i >= 0) arr.splice(i, 1); else arr.push(v); return arr; };
 
   /* ---------- ícones (mesmo traço do painel: grade 24, stroke 1.8) ---------- */
   const IP = {
