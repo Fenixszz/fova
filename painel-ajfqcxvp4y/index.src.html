@@ -698,8 +698,10 @@
     .qb-bell__dot { position: absolute; top: 6px; right: 6px; min-width: 16px; height: 16px; padding: 0 4px; border-radius: 999px; background: var(--brand); color: #221b0e; font-size: 10px; font-weight: 800; display: grid; place-items: center; box-shadow: 0 0 0 2px var(--bg-1); }
     .qb-notif { min-width: 300px; max-width: 340px; padding: 0; overflow: hidden; }
     .qb-notif__head { display: flex; align-items: center; justify-content: space-between; padding: 13px 15px; border-bottom: 1px solid var(--line-soft); font-size: 13px; }
-    .qb-notif__clear { background: none; border: none; color: var(--brand-mid); font-family: var(--font); font-size: 12px; font-weight: 600; cursor: pointer; }
-    .qb-notif__clear:hover { color: var(--brand-bright); }
+    .qb-notif__clear { background: none; border: 1px solid var(--line-soft); color: var(--brand-mid); font-family: var(--font); font-size: 12px; font-weight: 600; cursor: pointer; padding: 5px 10px; margin: -4px -4px -4px 0; border-radius: 8px; }
+    .qb-notif__clear:hover { color: var(--brand-bright); background: rgba(223,192,144,.1); border-color: var(--brand); }
+    .qb-notif__clear:active { transform: translateY(1px); }
+    .qb-notif__clear:focus-visible { outline: 2px solid var(--brand); outline-offset: 1px; }
     .qb-notif__item { display: flex; gap: 11px; align-items: flex-start; width: 100%; text-align: left; padding: 11px 15px; background: none; border: none; border-bottom: 1px solid var(--line-soft); color: var(--text-2); font-family: var(--font); cursor: pointer; transition: background .12s; }
     .qb-notif__item:hover { background: var(--bg-3); }
     .qb-notif__item.is-unread { background: rgba(203,169,110,.06); }
