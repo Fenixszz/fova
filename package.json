@@ -9,6 +9,7 @@
     "shot": "node screenshot.mjs"
   },
   "dependencies": {
+    "nodemailer": "^6.10.1",
     "puppeteer-core": "^23.11.1"
   }
 }

@@ -5,26 +5,39 @@
 // (menção, atribuição, prazo, automação). É acionada pelo cliente
 // quando "Avisar por e-mail" está ligado.
 //
+// Envio via SMTP do Gmail (não precisa de domínio próprio): manda a
+// partir da conta Gmail configurada, para qualquer destinatário.
+//
 // Segurança (é um endpoint público, então trava o uso):
 //   1. Exige o token de sessão do Supabase do sócio logado (Bearer).
 //   2. Só envia para o e-mail de um PERFIL real (tabela profiles).
 //   Assim ninguém de fora usa isso como relay de spam.
 //
 // Variáveis de ambiente (Vercel → Project → Settings → Environment Variables):
-//   RESEND_API_KEY   (obrigatória, SECRETA) — chave da conta Resend.
-//   FOVA_MAIL_FROM   (recomendada)          — remetente verificado,
-//                                             ex.: "Fova CRM <crm@seudominio.com.br>".
-//                                             Sem domínio verificado, use o
-//                                             remetente de teste do Resend
-//                                             (onboarding@resend.dev), que só
-//                                             entrega para o dono da conta.
+//   GMAIL_USER          (obrigatória) — o e-mail Gmail que vai enviar,
+//                                        ex.: suaagencia@gmail.com.
+//   GMAIL_APP_PASSWORD  (obrigatória, SECRETA) — a "senha de app" de 16
+//                                        caracteres gerada no Google
+//                                        (Conta Google → Segurança →
+//                                        Verificação em duas etapas →
+//                                        Senhas de app). NÃO é a senha
+//                                        normal do Gmail.
+//   FOVA_MAIL_FROM      (opcional) — nome/remetente exibido. Padrão:
+//                                        "Fova CRM <GMAIL_USER>". No Gmail,
+//                                        o endereço precisa ser o próprio
+//                                        GMAIL_USER (ou um alias dele).
 //   SUPABASE_URL / SUPABASE_ANON_KEY (opcionais) — já têm o valor público padrão.
 // ============================================================
+
+import nodemailer from 'nodemailer';
 
 const SUPABASE_URL = process.env.SUPABASE_URL || 'https://arxtutjdxxkoelxkxpuu.supabase.co';
 const SUPABASE_ANON_KEY = process.env.SUPABASE_ANON_KEY ||
   'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImFyeHR1dGpkeHhrb2VseGt4cHV1Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTI2MjY0MjgsImV4cCI6MjEwODIwMjQyOH0.G19eh_enQ3lVdAYDdKQDxCwfokMiSB9ttqO_KgaxI9M';
-const MAIL_FROM = process.env.FOVA_MAIL_FROM || 'Fova CRM <onboarding@resend.dev>';
+
+const GMAIL_USER = process.env.GMAIL_USER || '';
+const GMAIL_PASS = (process.env.GMAIL_APP_PASSWORD || '').replace(/\s+/g, ''); // o Google mostra em blocos de 4; tira os espaços
+const MAIL_FROM = process.env.FOVA_MAIL_FROM || (GMAIL_USER ? 'Fova CRM <' + GMAIL_USER + '>' : '');
 
 const esc = (s) => String(s == null ? '' : s)
   .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
@@ -57,15 +70,27 @@ function emailHtml(nome, text, link) {
     '</div>';
 }
 
+let _transporter = null;
+function transporter() {
+  if (!_transporter) {
+    _transporter = nodemailer.createTransport({
+      host: 'smtp.gmail.com',
+      port: 465,
+      secure: true,
+      auth: { user: GMAIL_USER, pass: GMAIL_PASS },
+    });
+  }
+  return _transporter;
+}
+
 export default async function handler(req, res) {
   if (req.method !== 'POST') {
     res.status(405).json({ error: 'Método não permitido.' });
     return;
   }
 
-  const key = process.env.RESEND_API_KEY;
-  if (!key) {
-    res.status(500).json({ error: 'Servidor de e-mail não configurado (falta RESEND_API_KEY).' });
+  if (!GMAIL_USER || !GMAIL_PASS) {
+    res.status(500).json({ error: 'Servidor de e-mail não configurado (faltam GMAIL_USER / GMAIL_APP_PASSWORD).' });
     return;
   }
 
@@ -111,27 +136,18 @@ export default async function handler(req, res) {
       return;
     }
 
-    // 3) Envia pelo Resend.
+    // 3) Envia pelo Gmail (SMTP).
     const subject = text.length > 72 ? text.slice(0, 69) + '…' : text;
-    const mailRes = await fetch('https://api.resend.com/emails', {
-      method: 'POST',
-      headers: { Authorization: 'Bearer ' + key, 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        from: MAIL_FROM,
-        to: [dest.email],
-        subject: 'Fova · ' + subject,
-        text: text + (link ? '\n\nAbrir no painel: ' + link : ''),
-        html: emailHtml(dest.nome, text, link),
-      }),
+    await transporter().sendMail({
+      from: MAIL_FROM,
+      to: dest.email,
+      subject: 'Fova · ' + subject,
+      text: text + (link ? '\n\nAbrir no painel: ' + link : ''),
+      html: emailHtml(dest.nome, text, link),
     });
-    if (!mailRes.ok) {
-      const detail = await mailRes.text().catch(() => '');
-      res.status(502).json({ error: 'Falha ao enviar o e-mail.', detail: detail.slice(0, 300) });
-      return;
-    }
 
     res.status(200).json({ ok: true });
   } catch (e) {
-    res.status(500).json({ error: 'Erro inesperado no envio.', detail: String(e).slice(0, 200) });
+    res.status(502).json({ error: 'Falha ao enviar o e-mail.', detail: String(e && e.message || e).slice(0, 300) });
   }
 }
