@@ -1818,7 +1818,7 @@ window.FOVA_CFG = {
         if (s.key === 'import' && s.data) writeLS(LS.imports, mergeImports(readLS(LS.imports), s.data));
         if (s.key === 'boards' && s.data) {
           var localB = readLS(LS.boards);
-          writeLS(LS.boards, applyDead(localB ? mergeBoards(localB, s.data) : s.data, dead));
+          writeLS(LS.boards, localB ? mergeBoards(localB, s.data, true) : applyDead(s.data, dead));
         }
       });
       // Primeira vez com Supabase: sobe o que só existe local pro servidor.
@@ -2045,39 +2045,69 @@ window.FOVA_CFG = {
   }
 
   // Mescla dois estados de Quadros preservando edições de cartões diferentes.
-  function mergeBoards(localS, remoteS) {
+  // Mescla dois estados de Quadros.
+  //  · Conteúdo de cada cartão (título, descrição, campos…) vence pelo updatedAt.
+  //  · Arranjo e visão (ordem dos cartões/colunas, agrupar, ordenar, filtrar,
+  //    exibir/densidade/coloridos) são do quadro: quando "adopt" é true, o lado
+  //    remoto manda — assim mudar a ordem/visão num computador reflete no outro.
+  //    (adopt = não tenho mudança local pendente; minha identidade e qual quadro
+  //    está aberto nunca mudam por sincronização.)
+  function mergeBoards(localS, remoteS, adopt) {
     try {
-      if (!localS) return remoteS; if (!remoteS) return localS;
+      if (!localS) return applyDead(remoteS, dead);
+      if (!remoteS) return applyDead(localS, dead);
       var out = JSON.parse(JSON.stringify(localS));
-      var lb = {}; out.boards.forEach(function (b) { lb[b.id] = b; });
-      (remoteS.boards || []).forEach(function (rb) {
-        var local = lb[rb.id];
-        if (!local) { out.boards.push(JSON.parse(JSON.stringify(rb))); return; }
-        var remoteNewer = (rb.updatedAt || 0) >= (local.updatedAt || 0);
-        // meta + estrutura de colunas: lado com updatedAt maior
-        if (remoteNewer) { local.name = rb.name; local.color = rb.color; local.archived = rb.archived; local.columns = rb.columns; local.labels = rb.labels || local.labels; local.automations = rb.automations || local.automations; local.updatedAt = rb.updatedAt; }
-        // cartões: união por id, cada um vence por updatedAt
-        var byId = {}; (local.cards || []).forEach(function (c) { byId[c.id] = c; });
-        (rb.cards || []).forEach(function (rc) {
-          var lc = byId[rc.id];
-          if (!lc) { // existe só no remoto
-            // só ressuscita se foi criado/editado depois do nosso board
-            if ((rc.updatedAt || 0) >= (local.updatedAt || 0) || remoteNewer) { local.cards.push(rc); byId[rc.id] = rc; }
-          } else if ((rc.updatedAt || 0) > (lc.updatedAt || 0)) {
-            if (conflictBetween(lc, rc)) toast('Alguém editou "' + (rc.title || 'um cartão') + '" ao mesmo tempo — mantive a versão mais recente.', 'warn');
-            Object.assign(lc, rc);
-          }
-        });
-        // remoções: cartão sumiu do lado mais novo
-        if (remoteNewer) {
-          var rids = {}; (rb.cards || []).forEach(function (c) { rids[c.id] = 1; });
-          local.cards = local.cards.filter(function (c) { return rids[c.id] || (c.updatedAt || 0) > (rb.updatedAt || 0); });
+      var rById = {}; (remoteS.boards || []).forEach(function (b) { rById[b.id] = b; });
+      var oById = {}; out.boards.forEach(function (b) { oById[b.id] = b; });
+      // quadros que só existem no remoto → traz
+      (remoteS.boards || []).forEach(function (rb) { if (!oById[rb.id] && !dead[rb.id]) { out.boards.push(JSON.parse(JSON.stringify(rb))); } });
+      out.boards.forEach(function (local) {
+        var rb = rById[local.id]; if (!rb) return;
+        var rCards = {}; (rb.cards || []).forEach(function (c) { rCards[c.id] = c; });
+        var lCards = {}; (local.cards || []).forEach(function (c) { lCards[c.id] = c; });
+        if (adopt) {
+          // arranjo + visão do remoto mandam; conteúdo mais novo fica na posição do remoto
+          local.name = rb.name; local.color = rb.color; local.archived = rb.archived;
+          local.columns = rb.columns; local.labels = rb.labels || local.labels;
+          local.automations = rb.automations || local.automations;
+          local.filters = rb.filters || local.filters;
+          if (rb.ui) local.ui = rb.ui;
+          local.updatedAt = Math.max(rb.updatedAt || 0, local.updatedAt || 0);
+          var newCards = [];
+          (rb.cards || []).forEach(function (rc) {
+            var lc = lCards[rc.id];
+            if (lc && (lc.updatedAt || 0) > (rc.updatedAt || 0)) { lc.order = rc.order; lc.columnId = rc.columnId; newCards.push(lc); }
+            else newCards.push(rc);
+          });
+          // cartões criados aqui e ainda não enviados → mantém
+          (local.cards || []).forEach(function (lc) { if (!rCards[lc.id] && !dead[lc.id]) newCards.push(lc); });
+          local.cards = newCards;
+        } else {
+          // tenho mudança local pendente: mantenho MEU arranjo, só trago conteúdo novo
+          (rb.cards || []).forEach(function (rc) {
+            var lc = lCards[rc.id];
+            if (!lc) { if (!dead[rc.id]) local.cards.push(rc); }
+            else if ((rc.updatedAt || 0) > (lc.updatedAt || 0)) {
+              if (conflictBetween(lc, rc)) toast('Alguém editou "' + (rc.title || 'um cartão') + '" ao mesmo tempo — mantive a versão mais recente.', 'warn');
+              var keepOrder = lc.order, keepCol = lc.columnId;
+              Object.assign(lc, rc); lc.order = keepOrder; lc.columnId = keepCol;
+            }
+          });
         }
       });
-      // prefs: mantém as minhas (quadro aberto, densidade…)
+      // preferências de exibição compartilhadas (densidade, cartões coloridos, visão por quadro)
+      out.prefs = out.prefs || {};
+      if (adopt && remoteS.prefs) {
+        if (remoteS.prefs.density != null) out.prefs.density = remoteS.prefs.density;
+        if (remoteS.prefs.coloredCards != null) out.prefs.coloredCards = remoteS.prefs.coloredCards;
+        out.prefs.viewByBoard = Object.assign({}, out.prefs.viewByBoard, remoteS.prefs.viewByBoard || {});
+      }
+      // nunca mudam por sincronização: quem sou eu e qual quadro estou vendo
+      out.prefs.currentUserId = (localS.prefs || {}).currentUserId || out.prefs.currentUserId;
+      if ((localS.prefs || {}).lastBoardId != null) out.prefs.lastBoardId = localS.prefs.lastBoardId;
       applyDead(out, dead);   // tira o que foi apagado (em qualquer um dos lados)
       return out;
-    } catch (e) { log('mergeBoards erro', e); return remoteS || localS; }
+    } catch (e) { log('mergeBoards erro', e); return applyDead(remoteS || localS, dead); }
   }
   function conflictBetween(a, b) {
     // "conflito real" = os dois mexeram no mesmo campo-texto com valores diferentes
@@ -2141,7 +2171,9 @@ window.FOVA_CFG = {
   }
   function applyRemoteBoards(remoteData) {
     if (!remoteData) return;
-    var merged = mergeBoards(readLS(LS.boards), remoteData);
+    // Adoto o arranjo/visão do outro quando NÃO tenho mudança local ainda por enviar.
+    var adopt = !pendingBoards;
+    var merged = mergeBoards(readLS(LS.boards), remoteData, adopt);
     applying = true; writeLS(LS.boards, merged); applying = false;
     lastBoards = merged;
     safeReloadBoards();
